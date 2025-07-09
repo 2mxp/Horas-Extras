@@ -1,9 +1,10 @@
 // src/app/auth/page.tsx
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation'; // Importar useRouter
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
+  onAuthStateChanged,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
 } from 'firebase/auth';
@@ -13,6 +14,18 @@ export default function AuthPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const router = useRouter(); // Inicializar useRouter
+
+  // Hook para verificar el estado de autenticación al cargar la página
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // Usuario autenticado, redirigir al dashboard
+        router.push('/');
+      }
+    });
+    // Limpiar la suscripción al desmontar el componente
+    return () => unsubscribe();
+  }, [router]); // Dependencia en router
 
   const handleSignIn = async () => {
     try {
