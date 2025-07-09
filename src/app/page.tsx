@@ -57,10 +57,22 @@ export default function Dashboard() {
     return () => {
       console.log('Limpiando suscripción onAuthStateChanged'); // Nuevo log
       unsubscribe(); // Limpia el listener al desmontar el componente
-    };
+    }
 
 
   }, [router]);
+
+  const handleLogout = async () => {
+    try {
+      await auth.signOut();
+      console.log('Usuario cerró sesión');
+      // Redirigir a la página de inicio de sesión después de cerrar sesión
+      router.push('/auth');
+    } catch (error) {
+      console.error('Error al cerrar sesión:', error);
+      alert('Error al cerrar sesión. Inténtalo de nuevo.');
+    }
+  };
 
 
   // Function to fetch hours data for the selected project from Firestore
@@ -72,6 +84,7 @@ export default function Dashboard() {
     console.log(`Fetching hours data for project ID: ${projectId}`);
     try {
       const companyId = 'company1'; // TODO: Replace with dynamic company ID
+      // Use the correct Firestore path based on the user's database structure
       const hoursCollectionRef = collection(db, 'companies', companyId, 'projects', projectId, 'registrosHorasExtras');
 
 
@@ -96,85 +109,13 @@ export default function Dashboard() {
     }
   };
 
-
-  // Function to delete a specific hours entry from Firestore
-  const handleDeleteRecord = async (recordId: string) => {
-    if (!selectedProject) {
-      alert('No se ha seleccionado un proyecto.');
-      return;
-    }
-
-
-    try {
-      const companyId = 'company1'; // TODO: Replace with dynamic company ID
-      // Find the projectId based on the selectedProject name
-      // Assuming you have a way to get the project ID from the name,
-      // or you store the project ID along with the selectedProject name in state.
-      // For now, we'll refetch the project ID based on the name, which is not ideal
-      // if you have a large number of projects. A better approach is to store
-      // the selected project's ID directly.
-      const projectsCollectionRef = collection(db, 'companies', companyId, 'projects');
-      const q = query(projectsCollectionRef, where("name", "==", selectedProject));
-      const querySnapshot = await getDocs(q);
-      const projectDoc = querySnapshot.docs[0];
-      const projectId = projectDoc.id;
-
-
-      const recordRef = doc(db, 'companies', companyId, 'projects', projectId, 'registrosHorasExtras', recordId);
-      await deleteDoc(recordRef);
-      alert('Registro eliminado con éxito!');
-      setHoursData(prevHoursData => prevHoursData.filter(record => record.id !== recordId)); // Update local state
-    } catch (error) {
-      console.error('Error deleting record:', error);
-      alert('Error al eliminar el registro. Inténtalo de nuevo.');
-    }
-  };
-
-
-  // Function to delete a specific hours entry from Firestore
-  const handleDeleteHoursEntry = async (entryId: string) => {
-    if (!selectedProject) {
-      alert('No se ha seleccionado un proyecto.');
-      return;
-    }
-
-
-    try {
-      const companyId = 'company1'; // TODO: Replace with dynamic company ID
-      // Fetch the projectId based on the selectedProject name
-      const projectsCollectionRef = collection(db, 'companies', companyId, 'projects');
-      const q = query(projectsCollectionRef, where("name", "==", selectedProject));
-      const querySnapshot = await getDocs(q);
-
-
-      if (querySnapshot.empty) {
-        alert(`Error: No se encontró el proyecto "${selectedProject}" en la base de datos.`);
-        return;
-      }
-
-
-      const projectDoc = querySnapshot.docs[0];
-      const projectId = projectDoc.id;
-
-
-      const entryRef = doc(db, 'companies', companyId, 'projects', projectId, 'registrosHorasExtras', entryId);
-      await deleteDoc(entryRef);
-      alert('Registro eliminado con éxito!');
-      fetchHoursData(projectId); // Refresh the displayed data
-    } catch (error) {
-      console.error('Error deleting record:', error);
-      alert('Error al eliminar el registro. Inténtalo de nuevo.');
-    }
-  };
-
-
   // Definición de fetchProjects fuera de useEffect
   const fetchProjects = async () => {
     try {
       setLoadingProjects(true);
       setErrorLoadingProjects(null);
       const companyId = 'company1'; // TODO: Replace with dynamic company ID after authentication implementation
-      const projectsCollection = collection(db, `companies/${companyId}/projects`);
+      const projectsCollection = collection(db, 'companies', companyId, 'projects');
 
 
       console.log('Intentando leer de Firestore:', `companies/${companyId}/projects`); // Console log antes de leer
@@ -210,6 +151,9 @@ export default function Dashboard() {
  
   useEffect(() => {
     console.log('useEffect ejecutado, llamando a fetchProjects'); // Console log dentro del useEffect
+    // console.log('Valor de isAuthenticated:', isAuthenticated);
+    // console.log('Valor de selectedProject:', selectedProject);
+
     // Verifica que isAuthenticated sea verdadero antes de llamar a fetchProjects
     if (isAuthenticated) {
       console.log('Usuario autenticado, llamando a fetchProjects');
@@ -219,6 +163,7 @@ export default function Dashboard() {
     }
     // Fetch hours data when the selected project changes
     if (isAuthenticated && selectedProject) {
+      // console.log("Usuario autenticado y proyecto seleccionado. Intentando obtener datos de horas extras.");
       const fetchProjectAndHours = async () => {
         try {
           const companyId = 'company1'; // TODO: Replace with dynamic company ID
@@ -570,8 +515,6 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
 };
 
 
-
-
   // Placeholder for project management
   const handleCreateProject = () => {
     console.log('Create project clicked');
@@ -590,6 +533,25 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
     // TODO: Implement delete project functionality
   };
 
+  const handleDeleteRecord = async (recordId: string) => {
+    console.log(`Attempting to delete record with ID: ${recordId}`);
+    try {
+      const companyId = 'company1'; // TODO: Replace with dynamic company ID
+      const recordRef = doc(db, 'companies', companyId, 'hours_records', recordId);
+
+      await deleteDoc(recordRef);
+      console.log(`Record with ID ${recordId} successfully deleted.`);
+
+      // Refresh the hours data after successful deletion
+      if (selectedProject) {
+        // Find the project ID for the selected project to refresh the data
+        await fetchHoursData(selectedProject); // fetchHoursData is smart enough to get the project ID
+      }
+
+    } catch (error) {
+      console.error(`Error deleting record with ID ${recordId}:`, error);
+    }
+  };
 
   if (authLoading) {
     return <div className="flex min-h-screen flex-col items-center justify-center p-24">Cargando...</div>;
@@ -598,6 +560,14 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
 
   return (
     <div className="container mx-auto p-4">
+      {/* Botón de Cerrar Sesión */}
+      <button
+        onClick={handleLogout}
+        className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline absolute top-4 right-4" // Clase para posicionar en la esquina superior derecha
+      >
+        Cerrar Sesión
+      </button>
+
       <h1 className="text-2xl font-bold mb-4">Dashboard Horas Extras</h1>
 
 
