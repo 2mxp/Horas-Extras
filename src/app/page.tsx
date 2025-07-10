@@ -1,7 +1,7 @@
 // src/app/page.tsx
 'use client';
 
-
+import { writeBatch } from 'firebase/firestore';
 import { deleteDoc, doc } from 'firebase/firestore';
 import { useState, useEffect, ChangeEvent } from 'react';
 import { db } from './lib/firebase'; // Import the initialized Firestore instance
@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation'; // Importa useRouter
 import { auth } from './lib/firebase'; // Importa la instancia de auth
 import * as XLSX from 'xlsx'; // Importa la librería xlsx
 
+const BATCH_SIZE = 500 // Define the batch size for deletions
 
 export default function Dashboard() {
    const [selectedProject, setSelectedProject] = useState('');
@@ -20,6 +21,10 @@ export default function Dashboard() {
    const [isCreatingProject, setIsCreatingProject] = useState(false); // Estado para indicar si se está creando un proyecto
 
 
+ const [startDate, setStartDate] = useState(''); // New state for start date filter
+  const [endDate, setEndDate] = useState(''); // New state for end date filter
+  const [filterByName, setFilterByName] = useState(''); // New state for name filter
+  const [filterByCedula, setFilterByCedula] = useState(''); // New state for cedula filter
   const [isAuthenticated, setIsAuthenticated] = useState(false); // Estado para el estado de autenticación
   const [authLoading, setAuthLoading] = useState(true); // Estado para el estado de carga de autenticación
   const router = useRouter(); // Instancia del router
@@ -76,40 +81,98 @@ export default function Dashboard() {
 
 
   // Function to fetch hours data for the selected project from Firestore
-  const fetchHoursData = async (projectId: string) => {
-    if (!projectId) {
-      setHoursData([]); // Clear hours data if no project is selected
-      return;
+const fetchHoursData = async (projectId: string) => {
+  if (!projectId) {
+ setHoursData([]); // Clear hours data if no project is selected
+ setHoursData([]); // Clear hours data if no project is selected
+    return;
+  }
+  console.log(`Fetching hours data for project ID: ${projectId}`);
+  try {
+    const companyId = 'company1'; // TODO: Replace with dynamic company ID
+    // Use the correct Firestore path based on the user's database structure
+    const hoursCollectionRef = collection(db, 'companies', companyId, 'projects', projectId, 'registrosHorasExtras');
+
+    // Inicia la consulta con la referencia a la colección
+    let q = query(hoursCollectionRef);
+
+    // Aplica filtro por fecha de inicio si startDate tiene valor
+    // Parse the startDate string to a Date object
+    // The input type="date" gives YYYY-MM-DD format
+    if (startDate) {
+      const [year, month, day] = startDate.split('-').map(Number);
+      // Month is 0-indexed in the Date constructor
+      const startDateTime = new Date(year, month - 1, day);
+      // Ensure it's the beginning of the day in local time
+      startDateTime.setHours(0, 0, 0, 0);
+      q = query(q, where('fecha', '>=', startDateTime));
     }
-    console.log(`Fetching hours data for project ID: ${projectId}`);
-    try {
-      const companyId = 'company1'; // TODO: Replace with dynamic company ID
-      // Use the correct Firestore path based on the user's database structure
-      const hoursCollectionRef = collection(db, 'companies', companyId, 'projects', projectId, 'registrosHorasExtras');
 
+    // Aplica filtro por fecha de fin si endDate tiene valor
+    // Parse the endDate string to a Date object
+    if (endDate) {
+      // The input type="date" gives YYYY-MM-DD format
+      const [year, month, day] = endDate.split('-').map(Number);
+      // Month is 0-indexed in the Date constructor
+      const endDateTime = new Date(year, month - 1, day);
+      // Ensure it's the end of the day in local time
+      endDateTime.setHours(23, 59, 59, 999);
+      q = query(q, where('fecha', '<=', endDateTime));
+    }
 
-      const querySnapshot = await getDocs(hoursCollectionRef);
+    // Aplica filtro por nombre si filterByName tiene valor (ignorando espacios)
+    if (filterByName.trim()) {
+      // Nota: Firestore where('fieldName', '==', value) requiere un match exacto.
+      // Para partial matches o "starts with", la lógica es más compleja
+      // y podría requerir una estrategia diferente (como obtener más datos y filtrar en frontend
+      // o usar soluciones como Algolia/Elasticsearch).
+      q = query(q, where('nombreTrabajador', '==', filterByName.trim()));
+    }
 
+    // Aplica filtro por cédula si filterByCedula tiene valor (ignorando espacios)
+    if (filterByCedula.trim()) {
+        // Para búsquedas exactas:
+        q = query(q, where('cedula', '==', filterByCedula.trim()));
+        // Similar al nombre, búsquedas parciales o "startsWith" son más complejas.
+      }
 
-      const data = querySnapshot.docs.map(doc => ({ // Map documents including their IDs
+    const querySnapshot = await getDocs(q);
+
+    const data = querySnapshot.docs.map(doc => {
+      const docData = doc.data();
+      let formattedDate = 'N/A'; // Default to N/A if fecha is missing or invalid
+
+      // Check if fecha is a valid Firestore Timestamp object before converting
+      if (docData.fecha && typeof docData.fecha === 'object' && docData.fecha.seconds !== undefined && docData.fecha.nanoseconds !== undefined) {
+        try {
+          formattedDate = new Date(docData.fecha.seconds * 1000).toLocaleDateString('en-CA'); // Format as YYYY-MM-DD
+        } catch (error) {
+          console.error("Error formatting date from Firestore Timestamp:", docData.fecha, error);
+          formattedDate = 'Invalid Date'; // Handle formatting errors
+        }
+      } else {
+          console.warn("Fecha field is missing or not a valid Firestore Timestamp:", docData.fecha);
+      }
+ return {
         id: doc.id,
-        ...doc.data() as {
-          fecha: string; nombreTrabajador: string; cedula: string;
-          horaIngreso: string; horaSalida: string; projectId: string;
-        } // Explicitly type the data
-      }));
+        // Use the formatted date string
+        fecha: formattedDate,
+        ...docData as { nombreTrabajador: string; cedula: string;
+          horaIngreso: string; horaSalida: string; projectId: string; }
+      } // Explicitly type the data
+    });
 
 
-      setHoursData(data);
-      console.log(`Fetched ${data.length} hours records.`);
+    setHoursData(data);
+    console.log(`Fetched ${data.length} hours records.`);
 
 
-    } catch (error) {
-      console.error('Error fetching hours data:', error);
-    }
-  };
+  } catch (error) {
+    console.error('Error fetching hours data:', error);
+  }
+};
 
-  // Definición de fetchProjects fuera de useEffect
+
   const fetchProjects = async () => {
     try {
       setLoadingProjects(true);
@@ -146,14 +209,127 @@ export default function Dashboard() {
     } finally {
       setLoadingProjects(false);
       console.log('fetchProjects terminado.'); // Console log al finalizar
+ }
+  };
+
+  // Function to fetch project ID and then hours data
+  const fetchProjectAndHours = async () => {
+    console.log("Iniciando fetchProjectAndHours para el proyecto:", selectedProject);
+    if (!selectedProject) {
+      console.log("No hay proyecto seleccionado en fetchProjectAndHours.");
+ setHoursData([]); // Clear hours data if no project is selected
+ return;
+    }
+
+    try {
+      const companyId = 'company1'; // TODO: Replace with dynamic company ID
+      const projectsCollectionRef = collection(db, 'companies', companyId, 'projects');
+      const q = query(projectsCollectionRef, where("name", "==", selectedProject));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+            const projectDoc = querySnapshot.docs[0];
+            const projectId = projectDoc.id;
+            console.log(`Found project ID ${projectId} for selected project ${selectedProject}`); // Log finding project ID
+            fetchHoursData(projectId); // Call fetchHoursData with the project ID
+      } else {
+            console.error(`Project with name ${selectedProject} not found.`);
+            setHoursData([]); // Clear hours data if project is not found
+      }
+    } catch (error) {
+      console.error('Error fetching project ID:', error);
+      setHoursData([]); // Clear hours data in case of error
     }
   };
- 
-  useEffect(() => {
-    console.log('useEffect ejecutado, llamando a fetchProjects'); // Console log dentro del useEffect
-    // console.log('Valor de isAuthenticated:', isAuthenticated);
-    // console.log('Valor de selectedProject:', selectedProject);
 
+  // Function to handle applying filters
+  const handleApplyFilters = () => {
+    console.log('Aplicando filtros...');
+    fetchProjectAndHours(); // Call the function that fetches project ID and then hours data
+  };
+
+ // New function to handle deleting records by date range
+ const handleDeleteRecordsByDateRange = async () => {
+  console.log('Iniciando eliminación de registros por rango de fechas.');
+
+  if (!selectedProject) {
+    alert('Por favor, selecciona un proyecto antes de eliminar datos.');
+    return;
+  }
+
+  if (!startDate || !endDate) {
+    alert('Por favor, selecciona una fecha de inicio y una fecha de fin para eliminar registros.');
+    return;
+  }
+
+  // Confirm with the user before deleting
+  const confirmDelete = confirm(`¿Estás seguro de que quieres eliminar todos los registros para el proyecto "${selectedProject}" entre las fechas ${startDate} y ${endDate}?`);
+  if (!confirmDelete) {
+    console.log('Eliminación cancelada por el usuario.');
+    return;
+  }
+
+  try {
+    const companyId = 'company1'; // TODO: Replace with dynamic company ID
+    // Find the project ID for the selected project
+    const projectsCollectionRef = collection(db, 'companies', companyId, 'projects');
+    const qProject = query(projectsCollectionRef, where("name", "==", selectedProject));
+    const querySnapshotProject = await getDocs(qProject);
+
+    if (querySnapshotProject.empty) {
+      alert(`Error: No se encontró el proyecto "${selectedProject}" en la base de datos.`);
+      return;
+    }
+
+    const projectId = querySnapshotProject.docs[0].id;
+    console.log(`Encontrado ID del proyecto ${projectId} para eliminar registros.`);
+
+    // Query for records within the date range for the selected project
+    const hoursCollectionRef = collection(db, 'companies', companyId, 'projects', projectId, 'registrosHorasExtras');
+
+    // --- MODIFICACIÓN: Usar objetos Date/Timestamps para la consulta ---
+    // Parse the startDate string to a Date object
+    const [startYear, startMonth, startDay] = startDate.split('-').map(Number);
+    const startDateTime = new Date(startYear, startMonth - 1, startDay);
+    startDateTime.setHours(0, 0, 0, 0); // Beginning of the day
+
+    // Parse the endDate string to a Date object
+    const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+    const endDateTime = new Date(endYear, endMonth - 1, endDay);
+    endDateTime.setHours(23, 59, 59, 999); // End of the day
+    // --- FIN MODIFICACIÓN ---
+
+
+    // Use the Date objects for the query
+    const qDelete = query(hoursCollectionRef,
+        where('fecha', '>=', startDateTime),
+        where('fecha', '<=', endDateTime)
+    );
+    const querySnapshotDelete = await getDocs(qDelete);
+
+    if (querySnapshotDelete.empty) {
+      alert(`No se encontraron registros para eliminar en el rango de fechas especificado (${startDate} a ${endDate}).`);
+      return;
+    }
+
+    // Delete documents in batches
+    const batch = writeBatch(db);
+    querySnapshotDelete.docs.forEach((doc) => {
+      batch.delete(doc.ref);
+    });
+
+    await batch.commit();
+    console.log(`Eliminados ${querySnapshotDelete.docs.length} registros.`);
+    alert(`Se eliminaron ${querySnapshotDelete.docs.length} registros para el proyecto "${selectedProject}" entre las fechas ${startDate} y ${endDate}.`);
+    fetchHoursData(projectId); // Refresh the hours data after deletion
+  } catch (error) {
+    console.error('Error al eliminar registros por rango de fechas:', error);
+    alert('Error al eliminar registros por rango de fechas. Inténtalo de nuevo.');
+  }
+};
+
+
+  useEffect(() => {
     // Verifica que isAuthenticated sea verdadero antes de llamar a fetchProjects
     if (isAuthenticated) {
       console.log('Usuario autenticado, llamando a fetchProjects');
@@ -162,37 +338,13 @@ export default function Dashboard() {
       console.log('Usuario no autenticado, no se llama a fetchProjects');
     }
     // Fetch hours data when the selected project changes
+    // This will load initial data when a project is selected.
     if (isAuthenticated && selectedProject) {
-      // console.log("Usuario autenticado y proyecto seleccionado. Intentando obtener datos de horas extras.");
-      const fetchProjectAndHours = async () => {
-        try {
-          const companyId = 'company1'; // TODO: Replace with dynamic company ID
-          const projectsCollectionRef = collection(db, 'companies', companyId, 'projects');
-          const q = query(projectsCollectionRef, where("name", "==", selectedProject));
-          const querySnapshot = await getDocs(q);
-
-
-          if (!querySnapshot.empty) {
-            const projectDoc = querySnapshot.docs[0];
-            const projectId = projectDoc.id;
-            console.log(`Found project ID ${projectId} for selected project ${selectedProject}`); // Log finding project ID
-            fetchHoursData(projectId); // Call fetchHoursData with the project ID
-          } else {
-            console.error(`Project with name ${selectedProject} not found.`);
-            setHoursData([]); // Clear hours data if project is not found
-          }
-        } catch (error) {
-          console.error('Error fetching project ID:', error);
-          setHoursData([]); // Clear hours data in case of error
-        }
-      };
-
-
-      fetchProjectAndHours(); // Call the async function
-
-
+      console.log("Usuario autenticado y proyecto seleccionado. Intentando obtener ID del proyecto.");
+      // Llamar a fetchProjectAndHours para obtener el ID y luego fetchHoursData
+      fetchProjectAndHours();
     } else {
-      setHoursData([]); // Clear hours data if no project is selected or user is not authenticated
+      setHoursData([]); // Clear hours data if no project is selected
     }
   }, [isAuthenticated, selectedProject]); // Agrega isAuthenticated y selectedProject como dependencias
 
@@ -338,61 +490,60 @@ export default function Dashboard() {
 };
 
 
-const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
+const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function to handle file upload
   console.log('Función handleFileUpload llamada.'); // Log al inicio
 
 
   // Add checks for event.target and files
-  if (!event.target || !event.target.files) {
+  if (!event.target || !event.target.files) { // Check if a file was selected
     console.error('No file target found or no files selected.');
     setFileData([]); // Clear fileData if no file is selected or target is null
     return;
   }
 
 
-  const files = event.target.files;
+  const files = event.target.files; // Get the selected files
   if (files.length > 0 && files[0]) { // Check if files array is not empty and has a first element
     const file = files[0];
     const reader = new FileReader();
 
 
     // Check if the file name is the same as the last loaded file
-    if (file.name === lastLoadedFileName) {
+    if (file.name === lastLoadedFileName) { // Prevent processing the same file multiple times
       alert(`El archivo "${file.name}" ya ha sido cargado.`);
       return; // Stop processing if it's a duplicate
     }
 
 
     reader.onload = (e) => {
-      if (e.target && e.target.result) {
+      if (e.target && e.target.result) { // Check if the file reading was successful
         const data = new Uint8Array(e.target.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
+        const workbook = XLSX.read(data, { type: 'array' }); // Read the Excel file
 
 
-        // Asumiendo que quieres leer la primera hoja
+        // Assume you want to read the first sheet
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
 
 
         // Convertir la hoja a un array de arrays (cada array es una fila)
         const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        console.log('Datos brutos del archivo Excel leídos (array de arrays):', rawData); // Log para ver los datos leídos en formato crudo
+        console.log('Raw Excel data (array of arrays):', rawData); // Log raw data
 
 
-        // --- Lógica de procesamiento con array de arrays ---
+        // --- Logic to extract date and project name from file name ---
+        const fileName = file.name;
+        const fileNameMatch = fileName.match(/^DIARIO_(.+)_(\d{8})\.xlsx$/i); // Regex to match DIARIO_ProjectName_YYYYMMDD.xlsx
+
+        let fileDateObject: Date | null = null;
+        let projectNameFromFile: string | null = null;
+
         let headerRowIndex = -1;
-        let fileDate: string | null = null;
         const processedData: any[] = [];
 
-
-        // Buscar la fila de encabezado y la fecha en el array de arrays
+        // Find the header row (assuming 'Nombre' is a header)
         for (let i = 0; i < rawData.length; i++) {
             const row = rawData[i];
-            console.log(`Revisando fila ${i}:`, row); // Log para depuración
-
-
-            // Buscar la fila que contiene el encabezado de columnas (Ej: Nombre, C.I., H. Ingreso)
-            // Buscar la fila donde la segunda columna (índice 1) sea "Nombre"
              if (row.length > 1 && row[1] === 'Nombre') {
                  headerRowIndex = i;
                  console.log(`Encabezado de columnas encontrado en la fila ${i}`); // Log cuando se encuentra
@@ -400,37 +551,41 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
              // Buscar la fila que contiene la fecha (Ej: "Fecha: 02 de Julio de 2025")
             // Buscar en la segunda columna (índice 1) si contiene la cadena "Fecha:"
              if (row.length > 1 && typeof row[1] === 'string' && row[1].includes('Fecha:')) {
-                 // Extraer la fecha de la cadena
-                 // Buscar la parte que comienza con "Fecha:" y extraerla
-                 const fechaMatch = row[1].match(/Fecha:\s*(.*)/);
-                 if (fechaMatch && fechaMatch[1]) {
-                     fileDate = fechaMatch[1].trim();
-                     console.log(`Fecha encontrada: ${fileDate} en la fila ${i}`); // Log cuando se encuentra
-                 }
+                 console.warn(`Fecha encontrada en el contenido del archivo en la fila ${i}. Se ignorará y se usará la fecha del nombre del archivo.`);
              }
-
-
-             // Ahora esperamos encontrar AMBOS en diferentes filas
-             // Puedes decidir si sales del bucle una vez que encuentras ambos
-             // if (headerRowIndex !== -1 && fileDate !== null) {
-             //   break;
-             // }
         }
 
 
-        // Después del bucle, verificamos si encontramos ambos
+        // --- Process extracted date and project name from file name ---
+        if (fileNameMatch && fileNameMatch[1] && fileNameMatch[2]) {
+            projectNameFromFile = fileNameMatch[1].replace(/_/g, ' '); // Replace underscores with spaces for project name
+            const dateStringFromFile = fileNameMatch[2]; // YYYYMMDD
+
+            const year = parseInt(dateStringFromFile.substring(0, 4), 10);
+            const month = parseInt(dateStringFromFile.substring(4, 6), 10) - 1; // Months are 0-indexed
+            const day = parseInt(dateStringFromFile.substring(6, 8), 10);
+
+            fileDateObject = new Date(year, month, day);
+
+            if (isNaN(fileDateObject.getTime())) {
+                fileDateObject = null; // Not a valid date
+                console.error("Extracted date from file name is not valid:", dateStringFromFile);
+            } else {
+                console.log("Date extracted from file name:", fileDateObject);
+                console.log("Project Name extracted from file name:", projectNameFromFile);
+            }
+        }
+
          if (headerRowIndex === -1) {
              alert('No se encontró la fila de encabezado con "Nombre". Asegúrate de que el formato sea correcto.');
              setFileData([]); // Limpiar datos si hay error
              return;
          }
-          if (fileDate === null) {
-              alert('No se encontró la fecha del archivo. Asegúrate de que contiene "Fecha: DD de Mes de YYYY".');
+          if (fileDateObject === null) {
+              alert('No se pudo extraer una fecha válida del nombre del archivo. Asegúrate de que el nombre siga el formato DIARIO_NombreProyecto_YYYYMMDD.xlsx');
               setFileData([]); // Limpiar datos si hay error
               return;
           }
-
-
 
 
         // Procesar las filas de datos a partir de la siguiente al encabezado
@@ -479,7 +634,7 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
 
 
             processedData.push({
-                fecha: fileDate, // Usar la fecha encontrada
+                fecha: fileDateObject, // **Ahora almacenamos el objeto Date**
                 nombreTrabajador: nombreTrabajador,
                 cedula: cedula,
                 horaIngreso: horaIngreso,
@@ -513,6 +668,7 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
       setFileData([]); // Limpiar fileData si no se selecciona archivo o se cancela
   }
 };
+
 
 
   // Placeholder for project management
@@ -630,6 +786,67 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
           </>
         )}
       </div>
+
+
+ {/* Filters Section */}
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold mb-2">Filtrar Datos de Horas Extras</h2>
+        <div className="flex flex-wrap gap-4 mb-4">
+          <div className="flex-1 min-w-[200px]">
+            <label htmlFor="startDate" className="block text-gray-700 text-sm font-bold mb-2">Fecha Inicio:</label>
+            <input
+              type="date"
+              id="startDate"
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+          </div>
+          <div className="flex-1 min-w-[200px]">
+            <label htmlFor="endDate" className="block text-gray-700 text-sm font-bold mb-2">Fecha Fin:</label>
+            <input
+              type="date"
+              id="endDate"
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </div>
+          <div className="flex-1 min-w-[200px]">
+            <label htmlFor="filterByName" className="block text-gray-700 text-sm font-bold mb-2">Filtrar por Nombre:</label>
+            <input
+              type="text"
+              id="filterByName"
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              value={filterByName}
+              onChange={(e) => setFilterByName(e.target.value)}
+            />
+          </div>
+          <div className="flex-1 min-w-[200px]">
+            <label htmlFor="filterByCedula" className="block text-gray-700 text-sm font-bold mb-2">Filtrar por C.I.:</label>
+            <input
+              type="text"
+              id="filterByCedula"
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              value={filterByCedula}
+              onChange={(e) => setFilterByCedula(e.target.value)}
+            />
+          </div>
+        </div>
+        <button
+          onClick={handleApplyFilters}
+          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+        >
+          Aplicar Filtros
+        </button>
+      </div>
+ {/* Button to delete records by date range */}
+        {selectedProject && (
+          <button
+            onClick={handleDeleteRecordsByDateRange}
+            className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ml-4"
+          >Eliminar Registros por Fecha</button>
+        )}
 
 
       {/* Display Hours Data Section */}
