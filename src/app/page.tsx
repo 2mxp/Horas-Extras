@@ -1,6 +1,7 @@
 // src/app/page.tsx
 'use client';
 
+
 import { writeBatch } from 'firebase/firestore';
 import { deleteDoc, doc } from 'firebase/firestore';
 import { useState, useEffect, ChangeEvent } from 'react';
@@ -8,9 +9,12 @@ import { db } from './lib/firebase'; // Import the initialized Firestore instanc
 import { collection, getDocs, addDoc, query, where } from 'firebase/firestore';
 import { useRouter } from 'next/navigation'; // Importa useRouter
 import { auth } from './lib/firebase'; // Importa la instancia de auth
+import { createProject, getProjectsByCompany } from './lib/projectService'; // Import project service functions
 import * as XLSX from 'xlsx'; // Importa la librería xlsx
 
+
 const BATCH_SIZE = 500 // Define the batch size for deletions
+
 
 export default function Dashboard() {
    const [selectedProject, setSelectedProject] = useState('');
@@ -19,6 +23,8 @@ export default function Dashboard() {
    const [errorLoadingProjects, setErrorLoadingProjects] = useState<string | null>(null); // New state for error handling
    const [newProjectName, setNewProjectName] = useState(''); // Estado para el nombre del nuevo proyecto
    const [isCreatingProject, setIsCreatingProject] = useState(false); // Estado para indicar si se está creando un proyecto
+
+
 
 
  const [startDate, setStartDate] = useState(''); // New state for start date filter
@@ -33,7 +39,11 @@ export default function Dashboard() {
   const [hoursData, setHoursData] = useState<any[]>([]); // New state to store fetched hours data
 
 
+
+
   console.log('Componente Dashboard renderizado'); // Console log de renderización
+
+
 
 
   // Hook para verificar el estado de autenticación
@@ -56,7 +66,11 @@ export default function Dashboard() {
     });
 
 
+
+
     console.log('Suscripción onAuthStateChanged establecida'); // Nuevo log
+
+
 
 
     return () => {
@@ -65,7 +79,10 @@ export default function Dashboard() {
     }
 
 
+
+
   }, [router]);
+
 
   const handleLogout = async () => {
     try {
@@ -80,10 +97,11 @@ export default function Dashboard() {
   };
 
 
+
+
   // Function to fetch hours data for the selected project from Firestore
 const fetchHoursData = async (projectId: string) => {
   if (!projectId) {
- setHoursData([]); // Clear hours data if no project is selected
  setHoursData([]); // Clear hours data if no project is selected
     return;
   }
@@ -93,8 +111,10 @@ const fetchHoursData = async (projectId: string) => {
     // Use the correct Firestore path based on the user's database structure
     const hoursCollectionRef = collection(db, 'companies', companyId, 'projects', projectId, 'registrosHorasExtras');
 
+
     // Inicia la consulta con la referencia a la colección
     let q = query(hoursCollectionRef);
+
 
     // Aplica filtro por fecha de inicio si startDate tiene valor
     // Parse the startDate string to a Date object
@@ -108,6 +128,7 @@ const fetchHoursData = async (projectId: string) => {
       q = query(q, where('fecha', '>=', startDateTime));
     }
 
+
     // Aplica filtro por fecha de fin si endDate tiene valor
     // Parse the endDate string to a Date object
     if (endDate) {
@@ -120,6 +141,7 @@ const fetchHoursData = async (projectId: string) => {
       q = query(q, where('fecha', '<=', endDateTime));
     }
 
+
     // Aplica filtro por nombre si filterByName tiene valor (ignorando espacios)
     if (filterByName.trim()) {
       // Nota: Firestore where('fieldName', '==', value) requiere un match exacto.
@@ -129,6 +151,7 @@ const fetchHoursData = async (projectId: string) => {
       q = query(q, where('nombreTrabajador', '==', filterByName.trim()));
     }
 
+
     // Aplica filtro por cédula si filterByCedula tiene valor (ignorando espacios)
     if (filterByCedula.trim()) {
         // Para búsquedas exactas:
@@ -136,11 +159,14 @@ const fetchHoursData = async (projectId: string) => {
         // Similar al nombre, búsquedas parciales o "startsWith" son más complejas.
       }
 
+
     const querySnapshot = await getDocs(q);
+
 
     const data = querySnapshot.docs.map(doc => {
       const docData = doc.data();
       let formattedDate = 'N/A'; // Default to N/A if fecha is missing or invalid
+
 
       // Check if fecha is a valid Firestore Timestamp object before converting
       if (docData.fecha && typeof docData.fecha === 'object' && docData.fecha.seconds !== undefined && docData.fecha.nanoseconds !== undefined) {
@@ -154,17 +180,24 @@ const fetchHoursData = async (projectId: string) => {
           console.warn("Fecha field is missing or not a valid Firestore Timestamp:", docData.fecha);
       }
  return {
+        // Explicitly list the fields to include, excluding any potential non-renderable objects
         id: doc.id,
         // Use the formatted date string
         fecha: formattedDate,
-        ...docData as { nombreTrabajador: string; cedula: string;
-          horaIngreso: string; horaSalida: string; projectId: string; }
-      } // Explicitly type the data
+        nombreTrabajador: docData.nombreTrabajador,
+        cedula: docData.cedula,
+ horaIngreso: docData.horaIngreso,
+ horaSalida: docData.horaSalida,
+      }; // Explicitly list the fields to include, excluding any potential non-renderable objects
     });
+
+
 
 
     setHoursData(data);
     console.log(`Fetched ${data.length} hours records.`);
+
+
 
 
   } catch (error) {
@@ -178,29 +211,11 @@ const fetchHoursData = async (projectId: string) => {
       setLoadingProjects(true);
       setErrorLoadingProjects(null);
       const companyId = 'company1'; // TODO: Replace with dynamic company ID after authentication implementation
-      const projectsCollection = collection(db, 'companies', companyId, 'projects');
-
-
-      console.log('Intentando leer de Firestore:', `companies/${companyId}/projects`); // Console log antes de leer
-
-
-      const projectSnapshot = await getDocs(projectsCollection);
-
-
-      console.log('Snapshot recibido:', projectSnapshot); // **Nuevo log**
-
-
-      console.log('Datos recibidos de Firestore (antes de mapear):', projectSnapshot.docs.map(doc => doc.data())); // Nuevo log
-
-
-      const projects = projectSnapshot.docs
-        .map(doc => doc.data()) // Obtener los datos de cada documento
-        .filter(data => data && data.name) // Filtrar documentos que no tienen data o campo name
-        .map(data => data.name); // Extraer el nombre
-
-
+      const projects = await getProjectsByCompany(companyId); // Assuming getProjectsByCompany returns an array of project objects with 'name'
       setProjectList(projects);
       console.log('Proyectos establecidos en el estado:', projects); // **Nuevo log**
+
+
 
 
     } catch (error) {
@@ -212,6 +227,7 @@ const fetchHoursData = async (projectId: string) => {
  }
   };
 
+
   // Function to fetch project ID and then hours data
   const fetchProjectAndHours = async () => {
     console.log("Iniciando fetchProjectAndHours para el proyecto:", selectedProject);
@@ -221,26 +237,16 @@ const fetchHoursData = async (projectId: string) => {
  return;
     }
 
-    try {
-      const companyId = 'company1'; // TODO: Replace with dynamic company ID
-      const projectsCollectionRef = collection(db, 'companies', companyId, 'projects');
-      const q = query(projectsCollectionRef, where("name", "==", selectedProject));
-      const querySnapshot = await getDocs(q);
 
-      if (!querySnapshot.empty) {
-            const projectDoc = querySnapshot.docs[0];
-            const projectId = projectDoc.id;
-            console.log(`Found project ID ${projectId} for selected project ${selectedProject}`); // Log finding project ID
-            fetchHoursData(projectId); // Call fetchHoursData with the project ID
-      } else {
-            console.error(`Project with name ${selectedProject} not found.`);
-            setHoursData([]); // Clear hours data if project is not found
-      }
+    try {
+      // Use the selectedProject (which is now the ID) directly to fetch hours data
+      fetchHoursData(selectedProject); // Call fetchHoursData with the project ID
     } catch (error) {
       console.error('Error fetching project ID:', error);
       setHoursData([]); // Clear hours data in case of error
     }
   };
+
 
   // Function to handle applying filters
   const handleApplyFilters = () => {
@@ -248,19 +254,23 @@ const fetchHoursData = async (projectId: string) => {
     fetchProjectAndHours(); // Call the function that fetches project ID and then hours data
   };
 
+
  // New function to handle deleting records by date range
  const handleDeleteRecordsByDateRange = async () => {
   console.log('Iniciando eliminación de registros por rango de fechas.');
+
 
   if (!selectedProject) {
     alert('Por favor, selecciona un proyecto antes de eliminar datos.');
     return;
   }
 
+
   if (!startDate || !endDate) {
     alert('Por favor, selecciona una fecha de inicio y una fecha de fin para eliminar registros.');
     return;
   }
+
 
   // Confirm with the user before deleting
   const confirmDelete = confirm(`¿Estás seguro de que quieres eliminar todos los registros para el proyecto "${selectedProject}" entre las fechas ${startDate} y ${endDate}?`);
@@ -269,23 +279,15 @@ const fetchHoursData = async (projectId: string) => {
     return;
   }
 
+
   try {
     const companyId = 'company1'; // TODO: Replace with dynamic company ID
-    // Find the project ID for the selected project
-    const projectsCollectionRef = collection(db, 'companies', companyId, 'projects');
-    const qProject = query(projectsCollectionRef, where("name", "==", selectedProject));
-    const querySnapshotProject = await getDocs(qProject);
+    const projectId = selectedProject; // Use the selected project ID directly
 
-    if (querySnapshotProject.empty) {
-      alert(`Error: No se encontró el proyecto "${selectedProject}" en la base de datos.`);
-      return;
-    }
-
-    const projectId = querySnapshotProject.docs[0].id;
-    console.log(`Encontrado ID del proyecto ${projectId} para eliminar registros.`);
 
     // Query for records within the date range for the selected project
     const hoursCollectionRef = collection(db, 'companies', companyId, 'projects', projectId, 'registrosHorasExtras');
+
 
     // --- MODIFICACIÓN: Usar objetos Date/Timestamps para la consulta ---
     // Parse the startDate string to a Date object
@@ -293,11 +295,14 @@ const fetchHoursData = async (projectId: string) => {
     const startDateTime = new Date(startYear, startMonth - 1, startDay);
     startDateTime.setHours(0, 0, 0, 0); // Beginning of the day
 
+
     // Parse the endDate string to a Date object
     const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
     const endDateTime = new Date(endYear, endMonth - 1, endDay);
     endDateTime.setHours(23, 59, 59, 999); // End of the day
     // --- FIN MODIFICACIÓN ---
+
+
 
 
     // Use the Date objects for the query
@@ -307,16 +312,19 @@ const fetchHoursData = async (projectId: string) => {
     );
     const querySnapshotDelete = await getDocs(qDelete);
 
+
     if (querySnapshotDelete.empty) {
       alert(`No se encontraron registros para eliminar en el rango de fechas especificado (${startDate} a ${endDate}).`);
       return;
     }
+
 
     // Delete documents in batches
     const batch = writeBatch(db);
     querySnapshotDelete.docs.forEach((doc) => {
       batch.delete(doc.ref);
     });
+
 
     await batch.commit();
     console.log(`Eliminados ${querySnapshotDelete.docs.length} registros.`);
@@ -327,6 +335,8 @@ const fetchHoursData = async (projectId: string) => {
     alert('Error al eliminar registros por rango de fechas. Inténtalo de nuevo.');
   }
 };
+
+
 
 
   useEffect(() => {
@@ -351,9 +361,15 @@ const fetchHoursData = async (projectId: string) => {
 
 
 
+
+
+
+
   // Función para crear un nuevo proyecto en Firestore con verificación de duplicados
   const handleCreateProjectFirebase = async () => {
     console.log("Iniciando handleCreateProjectFirebase"); // Este console.log debería aparecer
+
+
 
 
     if (!newProjectName.trim()) {
@@ -362,7 +378,11 @@ const fetchHoursData = async (projectId: string) => {
     }
 
 
+
+
     setIsCreatingProject(true); // Indicamos que la creación está en progreso
+
+
 
 
     try {
@@ -370,9 +390,13 @@ const fetchHoursData = async (projectId: string) => {
       const projectsCollectionRef = collection(db, 'companies', companyId, 'projects');
 
 
+
+
       // --- Inicio de la lógica de verificación de duplicados ---
       const q = query(projectsCollectionRef, where("name", "==", newProjectName.trim())); // Añade .trim() para evitar espacios extra
       const snapshot = await getDocs(q);
+
+
 
 
       if (!snapshot.empty) {
@@ -382,6 +406,8 @@ const fetchHoursData = async (projectId: string) => {
         return; // <--- Esto debería detener la ejecución
       }
       // --- Fin de la lógica de verificación de duplicados ---
+
+
 
 
       // Si no se encontraron duplicados, proceder a añadir el documento
@@ -396,8 +422,12 @@ const fetchHoursData = async (projectId: string) => {
       });
 
 
+
+
       console.log('Proyecto creado con ID:', docRef.id);
       alert('Proyecto creado con éxito!');
+
+
 
 
       setNewProjectName(''); // Limpiar el input después de crear
@@ -405,6 +435,10 @@ const fetchHoursData = async (projectId: string) => {
       // fetchProjects(); // Comenta o elimina esta línea si quieres actualización inmediata
       // Para actualización inmediata (opción 1 mencionada antes):
       setProjectList(prevList => [...prevList, newProjectName.trim()]);
+
+
+
+
 
 
 
@@ -418,9 +452,13 @@ const fetchHoursData = async (projectId: string) => {
   };
 
 
+
+
   // Función para manejar la carga de datos de horas extras a Firebase
   const handleUploadHoursData = async () => {
     console.log('Iniciando subida de datos de horas extras a Firebase.'); // Log al inicio
+
+
 
 
     if (!selectedProject) {
@@ -429,40 +467,30 @@ const fetchHoursData = async (projectId: string) => {
   }
 
 
+
+
   if (fileData.length === 0) {
     alert('No hay datos para subir. Carga un archivo Excel primero.');
     return;
   }
 
 
+
+
   // TODO: Añadir estado de carga para la subida
   // setIsUploading(true);
 
 
+
+
   try {
     const companyId = 'company1'; // TODO: Reemplazar con dynamic company ID
-    // Buscar el ID del documento del proyecto seleccionado
-    const projectsCollectionRef = collection(db, 'companies', companyId, 'projects');
-    const q = query(projectsCollectionRef, where("name", "==", selectedProject));
-    const querySnapshot = await getDocs(q);
-
-
-    if (querySnapshot.empty) {
-      alert(`Error: No se encontró el proyecto "${selectedProject}" en la base de datos.`);
-      // TODO: Resetear estado de carga
-      // setIsUploading(false);
-      return;
-    }
-
-
-    // Asumimos que solo habrá un proyecto con ese nombre para esta compañía
-    const projectDoc = querySnapshot.docs[0];
-    const projectId = projectDoc.id;
+    // Assume selectedProject is already the project ID
+    const projectId = selectedProject;
     console.log(`Subiendo datos al proyecto con ID: ${projectId}`); // Log del ID del proyecto
-
-
-    // Referencia a la subcolección de horas extras dentro del proyecto
     const hoursCollectionRef = collection(db, 'companies', companyId, 'projects', projectId, 'registrosHorasExtras');
+
+
 
 
     // Subir cada registro de horas extras como un documento
@@ -474,8 +502,12 @@ const fetchHoursData = async (projectId: string) => {
     }
 
 
+
+
     alert('Datos de horas extras subidos con éxito.');
     setFileData([]); // Limpiar los datos después de una subida exitosa
+
+
 
 
  fetchHoursData(projectId); // Refresh hours data after successful upload
@@ -490,8 +522,12 @@ const fetchHoursData = async (projectId: string) => {
 };
 
 
+
+
 const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function to handle file upload
   console.log('Función handleFileUpload llamada.'); // Log al inicio
+
+
 
 
   // Add checks for event.target and files
@@ -502,10 +538,14 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
   }
 
 
+
+
   const files = event.target.files; // Get the selected files
   if (files.length > 0 && files[0]) { // Check if files array is not empty and has a first element
     const file = files[0];
     const reader = new FileReader();
+
+
 
 
     // Check if the file name is the same as the last loaded file
@@ -515,10 +555,14 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
     }
 
 
+
+
     reader.onload = (e) => {
       if (e.target && e.target.result) { // Check if the file reading was successful
         const data = new Uint8Array(e.target.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' }); // Read the Excel file
+
+
 
 
         // Assume you want to read the first sheet
@@ -526,20 +570,27 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
         const worksheet = workbook.Sheets[sheetName];
 
 
+
+
         // Convertir la hoja a un array de arrays (cada array es una fila)
         const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         console.log('Raw Excel data (array of arrays):', rawData); // Log raw data
+
+
 
 
         // --- Logic to extract date and project name from file name ---
         const fileName = file.name;
         const fileNameMatch = fileName.match(/^DIARIO_(.+)_(\d{8})\.xlsx$/i); // Regex to match DIARIO_ProjectName_YYYYMMDD.xlsx
 
+
         let fileDateObject: Date | null = null;
         let projectNameFromFile: string | null = null;
 
+
         let headerRowIndex = -1;
         const processedData: any[] = [];
+
 
         // Find the header row (assuming 'Nombre' is a header)
         for (let i = 0; i < rawData.length; i++) {
@@ -556,16 +607,21 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
         }
 
 
+
+
         // --- Process extracted date and project name from file name ---
         if (fileNameMatch && fileNameMatch[1] && fileNameMatch[2]) {
             projectNameFromFile = fileNameMatch[1].replace(/_/g, ' '); // Replace underscores with spaces for project name
             const dateStringFromFile = fileNameMatch[2]; // YYYYMMDD
 
+
             const year = parseInt(dateStringFromFile.substring(0, 4), 10);
             const month = parseInt(dateStringFromFile.substring(4, 6), 10) - 1; // Months are 0-indexed
             const day = parseInt(dateStringFromFile.substring(6, 8), 10);
 
+
             fileDateObject = new Date(year, month, day);
+
 
             if (isNaN(fileDateObject.getTime())) {
                 fileDateObject = null; // Not a valid date
@@ -575,6 +631,7 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
                 console.log("Project Name extracted from file name:", projectNameFromFile);
             }
         }
+
 
          if (headerRowIndex === -1) {
              alert('No se encontró la fila de encabezado con "Nombre". Asegúrate de que el formato sea correcto.');
@@ -588,6 +645,8 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
           }
 
 
+
+
         // Procesar las filas de datos a partir de la siguiente al encabezado
         // Usaremos los valores de la fila de encabezado para mapear los datos correctamente
         const headerRow = rawData[headerRowIndex];
@@ -595,6 +654,8 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
         const ciColIndex = headerRow.indexOf('C.I.');
         const hIngresoColIndex = headerRow.indexOf('H. Ingreso');
         const hSalidaColIndex = headerRow.indexOf('H. Salida');
+
+
 
 
         // Validar que se encontraron las columnas necesarias
@@ -607,14 +668,22 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
 
 
 
+
+
+
+
         for (let i = headerRowIndex + 1; i < rawData.length; i++) {
             const row = rawData[i];
+
+
 
 
             // Asegurarnos de que la fila tiene suficientes columnas antes de intentar acceder
             if (row.length <= Math.max(nombreColIndex, ciColIndex, hIngresoColIndex, hSalidaColIndex)) {
                 continue; // Saltar filas que no tienen todas las columnas esperadas
             }
+
+
 
 
             // Extraer los datos usando los índices de las columnas
@@ -626,11 +695,17 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
 
 
 
+
+
+
+
             // Ignorar filas que no parecen ser datos de trabajadores (ej: filas vacías)
             // Podemos ajustar esta condición si hay otros patrones a ignorar
             if (!nombreTrabajador || !cedula) {
                 continue; // Saltar filas sin Nombre o C.I.
             }
+
+
 
 
             processedData.push({
@@ -644,16 +719,24 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
         }
 
 
+
+
         console.log('Datos del archivo Excel procesados:', processedData); // Log para ver los datos procesados
         setFileData(processedData); // Almacenar los datos procesados en el estado `fileData`
+
+
 
 
         // Update the state with the name of the successfully loaded file
         setLastLoadedFileName(file.name);
 
 
+
+
       }
     };
+
+
 
 
     reader.onerror = (error) => {
@@ -661,6 +744,8 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
       alert('Error al leer el archivo.');
       setFileData([]); // Limpiar datos en caso de error de lectura
     };
+
+
 
 
     reader.readAsArrayBuffer(file);
@@ -671,32 +756,51 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
 
 
 
+
+
+
   // Placeholder for project management
-  const handleCreateProject = () => {
-    console.log('Create project clicked');
-    // TODO: Implement create project functionality (este botón es el verde, puedes decidir si lo mantienes o lo eliminas)
-  };
+  // const handleCreateProject = () => {
+  //   console.log('Create project clicked');
+  //   // TODO: Implement create project functionality (este botón es el verde, puedes decidir si lo mantienes o lo eliminas)
+  // };
 
 
-  const handleEditProject = (projectName: string) => {
-    console.log('Edit project clicked:', projectName);
+
+
+  const handleEditProject = (project: { id: string; name: string }) => {
+    console.log('Edit project clicked, project ID:', project.id);
     // TODO: Implement edit project functionality
   };
 
 
+
+
   const handleDeleteProject = (projectName: string) => {
-    console.log('Delete project clicked:', projectName);
+    console.log('Delete project clicked, project ID:', projectName.id);
     // TODO: Implement delete project functionality
   };
+
 
   const handleDeleteRecord = async (recordId: string) => {
     console.log(`Attempting to delete record with ID: ${recordId}`);
     try {
       const companyId = 'company1'; // TODO: Replace with dynamic company ID
-      const recordRef = doc(db, 'companies', companyId, 'hours_records', recordId);
+
+      // Check if a project is selected before attempting to delete
+      if (!selectedProject) {
+        console.error('No project selected for deleting record.');
+        alert('Por favor, selecciona un proyecto antes de eliminar un registro.');
+        return;
+      }
+
+      // Correct the Firestore path to point to the specific record within the selected project's collection
+      const recordRef = doc(db, 'companies', companyId, 'projects', selectedProject, 'registrosHorasExtras', recordId);
+
 
       await deleteDoc(recordRef);
       console.log(`Record with ID ${recordId} successfully deleted.`);
+
 
       // Refresh the hours data after successful deletion
       if (selectedProject) {
@@ -704,14 +808,18 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
         await fetchHoursData(selectedProject); // fetchHoursData is smart enough to get the project ID
       }
 
+
     } catch (error) {
       console.error(`Error deleting record with ID ${recordId}:`, error);
     }
   };
 
+
   if (authLoading) {
     return <div className="flex min-h-screen flex-col items-center justify-center p-24">Cargando...</div>;
   }
+
+
 
 
   return (
@@ -724,7 +832,10 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
         Cerrar Sesión
       </button>
 
+
       <h1 className="text-2xl font-bold mb-4">Dashboard Horas Extras</h1>
+
+
 
 
       {/* Project Selection Section */}
@@ -744,13 +855,15 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
           >
             <option value="">-- Selecciona un Proyecto --</option>
             {projectList.map((project, index) => (
-              <option key={index} value={project}>
-                {project}
+              <option key={index} value={project.id}>
+                {project.name}{' '}
               </option>
             ))}
           </select>
         )}
       </div>
+
+
 
 
       {/* File Upload Section */}
@@ -786,6 +899,8 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
           </>
         )}
       </div>
+
+
 
 
  {/* Filters Section */}
@@ -849,6 +964,8 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
         )}
 
 
+
+
       {/* Display Hours Data Section */}
       <div className="mb-6">
         <h2 className="text-xl font-semibold mb-2">Datos de Horas Extras del Proyecto Seleccionado</h2>
@@ -896,9 +1013,13 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
       </div>
 
 
+
+
       {/* Project Management Section */}
       <div className="mb-6">
         <h2 className="text-xl font-semibold mb-3">Gestión de Proyectos/Fincas</h2>
+
+
 
 
 {/* Formulario para crear nuevo proyecto */}
@@ -917,6 +1038,8 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
         </div>
 
 
+
+
         <button
           onClick={handleCreateProjectFirebase}
           className={`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mr-2 ${isCreatingProject ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -924,6 +1047,8 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
         >
           {isCreatingProject ? 'Guardando...' : 'Guardar Nuevo Proyecto'}
         </button>
+
+
 
 
         {/* Botón original "Crear Nuevo Proyecto" (puedes decidir si lo mantienes o lo eliminas) */}
@@ -935,6 +1060,8 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
         </button>
 
 
+
+
         {loadingProjects && <p>Cargando proyectos para gestionar...</p>}
         {errorLoadingProjects && <p className="text-red-500">{errorLoadingProjects}</p>}
         {!loadingProjects && !errorLoadingProjects && (
@@ -944,7 +1071,7 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
             ) : (
               projectList.map((project, index) => (
                 <li key={index} className="flex justify-between items-center border-b py-2">
-                  <span>{project}</span>
+                  <span>{project.name}</span>
                   <div>
                     <button
                       onClick={() => handleEditProject(project)}
@@ -965,6 +1092,8 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
           </ul>
         )}
       </div>
+
+
 
 
       {/* TODO: Add other dashboard sections here (Reports, Data Comparison, Data Generation) */}
