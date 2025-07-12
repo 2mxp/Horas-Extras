@@ -1,11 +1,14 @@
 import { db } from './firebase';
 import { collection, addDoc, getDocs, query } from 'firebase/firestore';
 
-interface Project {
+export interface Project {
   id: string;
   name: string;
   createdAt: Date; // Assuming createdAt is stored as a Timestamp, Firestore automatically converts Date objects
-  // Add other project fields as needed
+  restDays: number[];
+  weeklyOvertimeLimit: number;
+  dailyOvertimeLimit: number;
+  hourlyRate: number;
 }
 
 /**
@@ -52,8 +55,11 @@ export const getProjectsByCompany = async (companyId: string): Promise<Project[]
       projects.push({
         id: doc.id,
         name: data.name,
-        createdAt: data.createdAt ? data.createdAt.toDate() : new Date(0), // Convert Timestamp to Date, handle potential missing field
-        // Map other project fields as needed
+        createdAt: data.createdAt ? data.createdAt.toDate() : new Date(0), // Convert Timestamp to Date, handle potential missing field and provide a default
+        restDays: data.restDays || [0, 6], // Provide a default value if missing
+        weeklyOvertimeLimit: data.weeklyOvertimeLimit || 8, // Provide a default value if missing
+        dailyOvertimeLimit: data.dailyOvertimeLimit || 2, // Provide a default value if missing
+        hourlyRate: data.hourlyRate || 5, // Provide a default value if missing
       });
     });
 
