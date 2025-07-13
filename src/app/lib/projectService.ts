@@ -11,6 +11,14 @@ export interface Project {
   hourlyRate: number;
 }
 
+export interface Trabajador {
+  id: string;
+  nombre: string;
+  cedula: string;
+  estado: string; // e.g., "activo", "retirado", "maternidad"
+}
+
+
 /**
  * Creates a new project document in the specified company's projects subcollection.
  * @param companyId The ID of the company.
@@ -67,5 +75,52 @@ export const getProjectsByCompany = async (companyId: string): Promise<Project[]
   } catch (error) {
     console.error('Error fetching projects:', error);
     throw new Error('Failed to fetch projects from Firestore.');
+  }
+};
+
+/**
+ * Adds a new trabajador document to the specified company's trabajadores subcollection.
+ * @param companyId The ID of the company.
+ * @param trabajadorData The data for the new trabajador (excluding the ID).
+ * @returns A promise that resolves with the ID of the newly created trabajador document.
+ * @throws Error if there's an error adding the document to Firestore.
+ */
+export const addTrabajador = async (companyId: string, trabajadorData: Omit<Trabajador, "id">): Promise<string> => {
+  try {
+    const trabajadoresCollectionRef = collection(db, 'companies', companyId, 'trabajadores');
+    const docRef = await addDoc(trabajadoresCollectionRef, trabajadorData);
+    return docRef.id;
+  } catch (error) {
+    console.error('Error adding trabajador:', error);
+    throw new Error('Failed to add trabajador to Firestore.');
+  }
+};
+
+/**
+ * Fetches all trabajadores for a given company from the trabajadores subcollection.
+ * @param companyId The ID of the company.
+ * @returns A promise that resolves with an array of Trabajador objects.
+ * @throws Error if there's an error fetching the documents from Firestore.
+ */
+export const getTrabajadoresByCompany = async (companyId: string): Promise<Trabajador[]> => {
+  try {
+    const trabajadoresCollectionRef = collection(db, 'companies', companyId, 'trabajadores');
+    const q = query(trabajadoresCollectionRef); // Add orderBy if needed, e.g., orderBy('nombre')
+    const querySnapshot = await getDocs(q);
+
+    const trabajadores: Trabajador[] = [];
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      trabajadores.push({
+        id: doc.id,
+        nombre: data.nombre,
+        cedula: data.cedula,
+        estado: data.estado,
+      });
+    });
+    return trabajadores;
+  } catch (error) {
+    console.error('Error fetching trabajadores:', error);
+    throw new Error('Failed to fetch trabajadores from Firestore.');
   }
 };

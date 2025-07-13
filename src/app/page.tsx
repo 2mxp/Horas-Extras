@@ -7,9 +7,11 @@ import { useState, useEffect, ChangeEvent } from 'react';
 import { db } from './lib/firebase'; // Import the initialized Firestore instance
 import { collection, getDocs, addDoc, query, where } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
-import { auth } from './lib/firebase'; // Importa la instancia de auth
-import { Project } from './lib/projectService'; // Import the Project interface
+import { auth } from './lib/firebase'; // Importa la instancia de auth\nimport { Trabajador, addTrabajador, getTrabajadoresByCompany } from './lib/projectService'; // Import Trabajador interface and worker service functions
+import { Project, Trabajador, addTrabajador, getTrabajadoresByCompany } from './lib/projectService'; // Import the Project interface and Trabajador related stuff
 import * as XLSX from 'xlsx'; // Importa la librería xlsx
+
+
 
 const BATCH_SIZE = 500 // Define the batch size for deletions
 
@@ -33,6 +35,11 @@ export default function Dashboard() {
   const [lastLoadedFileName, setLastLoadedFileName] = useState(''); // New state to store the name of the last loaded file
   const [hoursData, setHoursData] = useState<any[]>([]); // New state to store fetched hours data
 
+  // State variables for testing Trabajador functionality
+  const [newTrabajadorNombre, setNewTrabajadorNombre] = useState('');
+  const [newTrabajadorCedula, setNewTrabajadorCedula] = useState('');
+  const [newTrabajadorEstado, setNewTrabajadorEstado] = useState('');
+
   // Function to format the date to dd/mm/yyyy
   const formatDateToDDMMYYYY = (date: Date) => {
     const day = date.getDate().toString().padStart(2, '0');
@@ -43,6 +50,34 @@ export default function Dashboard() {
 
 
   console.log('Componente Dashboard renderizado'); // Console log de renderización
+
+  // State for the list of workers
+  const [trabajadoresList, setTrabajadoresList] = useState<Trabajador[]>([]);
+
+  // Function to fetch workers
+  const fetchTrabajadores = async () => {
+    try {
+      const companyId = 'company1'; // Use the hardcoded company ID for now
+      const workers = await getTrabajadoresByCompany(companyId);
+      setTrabajadoresList(workers);
+    } catch (error) {
+      console.error('Error fetching trabajadores:', error);
+    }
+  };
+
+  // Function to handle adding a worker
+  const handleAddTrabajador = async () => {
+    try {
+      const companyId = 'company1'; // Use the hardcoded company ID for now
+      await addTrabajador(companyId, { nombre: newTrabajadorNombre, cedula: newTrabajadorCedula, estado: newTrabajadorEstado });
+      setNewTrabajadorNombre('');
+      setNewTrabajadorCedula('');
+      setNewTrabajadorEstado('');
+      fetchTrabajadores(); // Refresh the list after adding
+    } catch (error) {
+      console.error('Error adding trabajador:', error);
+    }
+  };
 
 
   // Hook para verificar el estado de autenticación
@@ -72,7 +107,7 @@ export default function Dashboard() {
       console.log('Limpiando suscripción onAuthStateChanged'); // Nuevo log
       unsubscribe(); // Limpia el listener al desmontar el componente
     }
-
+ // Call fetchTrabajadores when the component mounts and authentication status changes
 
   }, [router]);
 
@@ -360,6 +395,11 @@ if (projectDocSnap.exists()) {
       fetchProjectAndHours();
     } else {
       setHoursData([]); // Clear hours data if no project is selected
+    }
+
+    // Fetch workers when the component mounts and authentication status changes
+    if (isAuthenticated) {
+      fetchTrabajadores();
     }
   }, [isAuthenticated, selectedProject]); // Agrega isAuthenticated y selectedProject como dependencias
 
@@ -1010,6 +1050,58 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
                 </li>
               ))
             )}
+          </ul>
+        )}
+      </div>
+
+      {/* Temporary Trabajador Testing Section */}
+      <div className="mb-6 p-4 border rounded-md bg-gray-100">
+        <h2 className="text-xl font-semibold mb-2">Prueba de Gestión de Trabajadores (Temporal)</h2>
+        <div className="flex flex-wrap gap-4 mb-4">
+          <div className="flex-1 min-w-[150px]">
+            <label htmlFor="trabajadorNombre" className="block text-gray-700 text-sm font-bold mb-2">Nombre:</label>
+            <input
+              type="text"
+              id="trabajadorNombre"
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              value={newTrabajadorNombre}
+              onChange={(e) => setNewTrabajadorNombre(e.target.value)}
+            />
+          </div>
+          <div className="flex-1 min-w-[150px]">
+            <label htmlFor="trabajadorCedula" className="block text-gray-700 text-sm font-bold mb-2">Cédula:</label>
+            <input
+              type="text"
+              id="trabajadorCedula"
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              value={newTrabajadorCedula}
+              onChange={(e) => setNewTrabajadorCedula(e.target.value)}
+            />
+          </div>
+          <div className="flex-1 min-w-[150px]">
+            <label htmlFor="trabajadorEstado" className="block text-gray-700 text-sm font-bold mb-2">Estado:</label>
+            <input
+              type="text"
+              id="trabajadorEstado"
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              value={newTrabajadorEstado}
+              onChange={(e) => setNewTrabajadorEstado(e.target.value)}
+            />
+          </div>
+        </div>
+        <button onClick={handleAddTrabajador} className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+          Agregar Trabajador
+        </button>
+        <h3 className="text-lg font-semibold mt-4 mb-2">Lista de Trabajadores:</h3>
+        {trabajadoresList.length === 0 ? (
+          <p>No hay trabajadores registrados.</p>
+        ) : (
+          <ul>
+            {trabajadoresList.map((trabajador) => (
+              <li key={trabajador.id} className="border-b py-1 text-gray-800">
+                {trabajador.nombre} ({trabajador.cedula}) - Estado: {trabajador.estado}
+              </li>
+            ))}
           </ul>
         )}
       </div>
