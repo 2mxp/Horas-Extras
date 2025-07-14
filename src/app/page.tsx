@@ -1,19 +1,24 @@
 // src/app/page.tsx
 'use client';
 
+
 import { writeBatch } from 'firebase/firestore';
 import { deleteDoc, doc, getDoc } from 'firebase/firestore';
 import { useState, useEffect, ChangeEvent } from 'react';
 import { db } from './lib/firebase'; // Import the initialized Firestore instance
 import { collection, getDocs, addDoc, query, where } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
-import { auth } from './lib/firebase'; // Importa la instancia de auth\nimport { Trabajador, addTrabajador, getTrabajadoresByCompany } from './lib/projectService'; // Import Trabajador interface and worker service functions
+import { auth } from './lib/firebase'; // Importa la instancia de auth
 import { Project, Trabajador, addTrabajador, getTrabajadoresByCompany } from './lib/projectService'; // Import the Project interface and Trabajador related stuff
 import * as XLSX from 'xlsx'; // Importa la librería xlsx
 
 
 
+
+
+
 const BATCH_SIZE = 500 // Define the batch size for deletions
+
 
 export default function Dashboard() {
    const [selectedProject, setSelectedProject] = useState('');
@@ -22,6 +27,8 @@ export default function Dashboard() {
    const [errorLoadingProjects, setErrorLoadingProjects] = useState<string | null>(null); // New state for error handling
    const [newProjectName, setNewProjectName] = useState(''); // Estado para el nombre del nuevo proyecto
    const [isCreatingProject, setIsCreatingProject] = useState(false); // Estado para indicar si se está creando un proyecto
+
+
 
 
  const [startDate, setStartDate] = useState(''); // New state for start date filter
@@ -35,10 +42,19 @@ export default function Dashboard() {
   const [lastLoadedFileName, setLastLoadedFileName] = useState(''); // New state to store the name of the last loaded file
   const [hoursData, setHoursData] = useState<any[]>([]); // New state to store fetched hours data
 
+
+  // New state variables for Absence Registration
+  const [selectedWorkerForAbsence, setSelectedWorkerForAbsence] = useState(''); // To store the selected worker's ID or Cédula
+  const [absenceDate, setAbsenceDate] = useState(''); // To store the absence date
+  const [absenceType, setAbsenceType] = useState(''); // To store the type of absence
+  const [absenceDescription, setAbsenceDescription] = useState(''); // To store the optional description
+
+
   // State variables for testing Trabajador functionality
   const [newTrabajadorNombre, setNewTrabajadorNombre] = useState('');
   const [newTrabajadorCedula, setNewTrabajadorCedula] = useState('');
   const [newTrabajadorEstado, setNewTrabajadorEstado] = useState('');
+
 
   // Function to format the date to dd/mm/yyyy
   const formatDateToDDMMYYYY = (date: Date) => {
@@ -49,10 +65,14 @@ export default function Dashboard() {
   };
 
 
+
+
   console.log('Componente Dashboard renderizado'); // Console log de renderización
+
 
   // State for the list of workers
   const [trabajadoresList, setTrabajadoresList] = useState<Trabajador[]>([]);
+
 
   // Function to fetch workers
   const fetchTrabajadores = async () => {
@@ -64,6 +84,9 @@ export default function Dashboard() {
       console.error('Error fetching trabajadores:', error);
     }
   };
+
+
+
 
   // Function to handle adding a worker
   const handleAddTrabajador = async () => {
@@ -78,6 +101,8 @@ export default function Dashboard() {
       console.error('Error adding trabajador:', error);
     }
   };
+
+
 
 
   // Hook para verificar el estado de autenticación
@@ -100,7 +125,11 @@ export default function Dashboard() {
     });
 
 
+
+
     console.log('Suscripción onAuthStateChanged establecida'); // Nuevo log
+
+
 
 
     return () => {
@@ -109,7 +138,9 @@ export default function Dashboard() {
     }
  // Call fetchTrabajadores when the component mounts and authentication status changes
 
+
   }, [router]);
+
 
   const handleLogout = async () => {
     try {
@@ -122,6 +153,8 @@ export default function Dashboard() {
       alert('Error al cerrar sesión. Inténtalo de nuevo.');
     }
   };
+
+
 
 
   // Function to fetch hours data for the selected project from Firestore
@@ -137,8 +170,10 @@ const fetchHoursData = async (projectId: string) => {
     // Use the correct Firestore path based on the user's database structure
     const hoursCollectionRef = collection(db, 'companies', companyId, 'projects', projectId, 'registrosHorasExtras');
 
+
     // Inicia la consulta con la referencia a la colección
     let q = query(hoursCollectionRef);
+
 
     // Aplica filtro por fecha de inicio si startDate tiene valor
     // Parse the startDate string to a Date object
@@ -152,6 +187,7 @@ const fetchHoursData = async (projectId: string) => {
       q = query(q, where('fecha', '>=', startDateTime));
     }
 
+
     // Aplica filtro por fecha de fin si endDate tiene valor
     // Parse the endDate string to a Date object
     if (endDate) {
@@ -164,6 +200,7 @@ const fetchHoursData = async (projectId: string) => {
       q = query(q, where('fecha', '<=', endDateTime));
     }
 
+
     // Aplica filtro por nombre si filterByName tiene valor (ignorando espacios)
     if (filterByName.trim()) {
       // Nota: Firestore where('fieldName', '==', value) requiere un match exacto.
@@ -173,6 +210,7 @@ const fetchHoursData = async (projectId: string) => {
       q = query(q, where('nombreTrabajador', '==', filterByName.trim()));
     }
 
+
     // Aplica filtro por cédula si filterByCedula tiene valor (ignorando espacios)
     if (filterByCedula.trim()) {
         // Para búsquedas exactas:
@@ -180,11 +218,14 @@ const fetchHoursData = async (projectId: string) => {
         // Similar al nombre, búsquedas parciales o "startsWith" son más complejas.
       }
 
+
     const querySnapshot = await getDocs(q);
+
 
     const data = querySnapshot.docs.map(doc => {
       const docData = doc.data();
       let recordDate: string | Date | null = null; // Allow Date object, string, or null
+
 
       // Check if fecha is a valid Firestore Timestamp object before converting
       if (docData.fecha && typeof docData.fecha === 'object' && docData.fecha.seconds !== undefined && docData.fecha.nanoseconds !== undefined) {
@@ -206,14 +247,20 @@ const fetchHoursData = async (projectId: string) => {
     });
 
 
+
+
     setHoursData(data);
     console.log(`Fetched ${data.length} hours records.`);
+
+
 
 
   } catch (error) {
     console.error('Error fetching hours data:', error);
   }
 };
+
+
 
 
   const fetchProjects = async () => {
@@ -224,16 +271,26 @@ const fetchHoursData = async (projectId: string) => {
       const projectsCollection = collection(db, 'companies', companyId, 'projects');
 
 
+
+
       console.log('Intentando leer de Firestore:', `companies/${companyId}/projects`); // Console log antes de leer
+
+
 
 
       const projectSnapshot = await getDocs(projectsCollection);
 
 
+
+
       console.log('Snapshot recibido:', projectSnapshot); // **Nuevo log**
 
 
+
+
       console.log('Datos recibidos de Firestore (antes de mapear):', projectSnapshot.docs.map(doc => doc.data())); // Nuevo log
+
+
 
 
       const projects: Project[] = projectSnapshot.docs
@@ -242,14 +299,18 @@ const fetchHoursData = async (projectId: string) => {
             name: doc.data().name || 'Unnamed Project', // Ensure name exists
             createdAt: doc.data().createdAt ? doc.data().createdAt.toDate() : new Date(), // Convert timestamp to Date, provide default
             restDays: doc.data().restDays || [], // Provide default
-            weeklyOvertimeLimit: doc.data().weeklyOvertimeLimit || 0, // Provide default
-            dailyOvertimeLimit: doc.data().dailyOvertimeLimit || 0, // Provide default
-            hourlyRate: doc.data().hourlyRate || 0, // Provide default
+            weeklyOvertimeLimit: 8, // Example: 8 hours
+            dailyOvertimeLimit: 2, // Example: 2 hours
+            hourlyRate: 5, // Example: 5 per hour
         })); // Map to Project objects
+
+
 
 
       setProjectList(projects);
       console.log('Proyectos establecidos en el estado:', projects); // **Nuevo log**
+
+
 
 
     } catch (error) {
@@ -261,6 +322,7 @@ const fetchHoursData = async (projectId: string) => {
  }
   };
 
+
   // Function to fetch project ID and then hours data
   const fetchProjectAndHours = async () => {
     console.log("Iniciando fetchProjectAndHours para el proyecto:", selectedProject);
@@ -270,11 +332,13 @@ const fetchHoursData = async (projectId: string) => {
  return;
     }
 
+
     try {
       const companyId = 'company1'; // TODO: Replace with dynamic company ID
       const projectsCollectionRef = collection(db, 'companies', companyId, 'projects');
 const projectDocRef = doc(projectsCollectionRef, selectedProject); // Get document reference by ID
 const projectDocSnap = await getDoc(projectDocRef); // Get the document snapshot
+
 
 if (projectDocSnap.exists()) {
         const projectId = projectDocSnap.id;
@@ -285,11 +349,13 @@ if (projectDocSnap.exists()) {
         setHoursData([]); // Clear hours data if project is not found
 }
 
+
     } catch (error) {
       console.error('Error fetching project ID:', error);
       setHoursData([]); // Clear hours data in case of error
     }
   };
+
 
   // Function to handle applying filters
   const handleApplyFilters = () => {
@@ -297,19 +363,23 @@ if (projectDocSnap.exists()) {
     fetchProjectAndHours(); // Call the function that fetches project ID and then hours data
   };
 
+
  // New function to handle deleting records by date range
  const handleDeleteRecordsByDateRange = async () => {
   console.log('Iniciando eliminación de registros por rango de fechas.');
+
 
   if (!selectedProject) {
     alert('Por favor, selecciona un proyecto antes de eliminar datos.');
     return;
   }
 
+
   if (!startDate || !endDate) {
     alert('Por favor, selecciona una fecha de inicio y una fecha de fin para eliminar registros.');
     return;
   }
+
 
   // Confirm with the user before deleting
   const confirmDelete = confirm(`¿Estás seguro de que quieres eliminar todos los registros para el proyecto "${selectedProject}" entre las fechas ${startDate} y ${endDate}?`);
@@ -318,7 +388,9 @@ if (projectDocSnap.exists()) {
     return;
   }
 
+
   let projectId: string | null = null; // Declare projectId outside the if block
+
 
   try {
     const companyId = 'company1'; // TODO: Replace with dynamic company ID
@@ -327,13 +399,16 @@ if (projectDocSnap.exists()) {
  const projectDocRef = doc(projectsCollectionRef, selectedProject); // Usar el ID directamente
  const projectDocSnap = await getDoc(projectDocRef);
 
+
     if (!projectDocSnap.exists()) {
  alert(`Error: No se encontró el proyecto con ID "${selectedProject}" en la base de datos.`);
       return;
     }
 
+
     projectId = projectDocSnap.id; // Assign value inside the if block
     const hoursCollectionRef = collection(db, 'companies', companyId, 'projects', projectId, 'registrosHorasExtras');
+
 
     // --- MODIFICACIÓN: Usar objetos Date/Timestamps para la consulta ---
     // Parse the startDate string to a Date object
@@ -341,11 +416,14 @@ if (projectDocSnap.exists()) {
     const startDateTime = new Date(startYear, startMonth - 1, startDay);
     startDateTime.setHours(0, 0, 0, 0); // Beginning of the day
 
+
     // Parse the endDate string to a Date object
     const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
     const endDateTime = new Date(endYear, endMonth - 1, endDay);
     endDateTime.setHours(23, 59, 59, 999); // End of the day
     // --- FIN MODIFICACIÓN ---
+
+
 
 
     // Use the Date objects for the query
@@ -355,10 +433,12 @@ if (projectDocSnap.exists()) {
     );
     const querySnapshotDelete = await getDocs(qDelete);
 
+
     if (querySnapshotDelete.empty) {
       alert(`No se encontraron registros para eliminar en el rango de fechas especificado (${startDate} a ${endDate}).`);
       return;
     }
+
 
     // Delete documents in batches
     const batch = writeBatch(db);
@@ -366,9 +446,14 @@ if (projectDocSnap.exists()) {
       batch.delete(doc.ref);
     });
 
+
     await batch.commit();
     console.log(`Eliminados ${querySnapshotDelete.docs.length} registros.`);
     alert(`Se eliminaron ${querySnapshotDelete.docs.length} registros para el proyecto "${selectedProject}" entre las fechas ${startDate} y ${endDate}.`);
+    
+    // Clear the date inputs after successful deletion
+    setStartDate('');
+    setEndDate('');
     if (projectId) { // Ensure projectId is not null before calling fetchHoursData
  fetchHoursData(projectId); // Refresh the hours data after deletion
     }
@@ -377,6 +462,8 @@ if (projectDocSnap.exists()) {
     alert('Error al eliminar registros por rango de fechas. Inténtalo de nuevo.');
   }
 };
+
+
 
 
   useEffect(() => {
@@ -397,6 +484,7 @@ if (projectDocSnap.exists()) {
       setHoursData([]); // Clear hours data if no project is selected
     }
 
+
     // Fetch workers when the component mounts and authentication status changes
     if (isAuthenticated) {
       fetchTrabajadores();
@@ -406,9 +494,15 @@ if (projectDocSnap.exists()) {
 
 
 
+
+
+
+
   // Función para crear un nuevo proyecto en Firestore con verificación de duplicados
   const handleCreateProjectFirebase = async () => {
     console.log("Iniciando handleCreateProjectFirebase"); // Este console.log debería aparecer
+
+
 
 
     if (!newProjectName.trim()) {
@@ -417,7 +511,11 @@ if (projectDocSnap.exists()) {
     }
 
 
+
+
     setIsCreatingProject(true); // Indicamos que la creación está en progreso
+
+
 
 
     try {
@@ -425,9 +523,13 @@ if (projectDocSnap.exists()) {
       const projectsCollectionRef = collection(db, 'companies', companyId, 'projects');
 
 
+
+
       // --- Inicio de la lógica de verificación de duplicados ---
       const q = query(projectsCollectionRef, where("name", "==", newProjectName.trim())); // Añade .trim() para evitar espacios extra
       const snapshot = await getDocs(q);
+
+
 
 
       if (!snapshot.empty) {
@@ -437,6 +539,8 @@ if (projectDocSnap.exists()) {
         return; // <--- Esto debería detener la ejecución
       }
       // --- Fin de la lógica de verificación de duplicados ---
+
+
 
 
       // Si no se encontraron duplicados, proceder a añadir el documento
@@ -451,8 +555,12 @@ if (projectDocSnap.exists()) {
       });
 
 
+
+
       console.log('Proyecto creado con ID:', docRef.id);
       alert('Proyecto creado con éxito!');
+
+
 
 
       setNewProjectName(''); // Limpiar el input después de crear
@@ -473,6 +581,11 @@ if (projectDocSnap.exists()) {
 
 
 
+
+
+
+
+
     } catch (error) {
       console.error('Error al crear proyecto:', error);
       alert('Error al crear proyecto. Inténtalo de nuevo.');
@@ -482,9 +595,13 @@ if (projectDocSnap.exists()) {
   };
 
 
+
+
   // Función para manejar la carga de datos de horas extras a Firebase
   const handleUploadHoursData = async () => {
     console.log('Iniciando subida de datos de horas extras a Firebase.'); // Log al inicio
+
+
 
 
     if (!selectedProject) {
@@ -493,14 +610,20 @@ if (projectDocSnap.exists()) {
   }
 
 
+
+
   if (fileData.length === 0) {
     alert('No hay datos para subir. Carga un archivo Excel primero.');
     return;
   }
 
 
+
+
   // TODO: Añadir estado de carga para la subida
   // setIsUploading(true);
+
+
 
 
   try {
@@ -510,6 +633,7 @@ if (projectDocSnap.exists()) {
 const projectDocRef = doc(projectsCollectionRef, selectedProject); // Get document reference by ID
 const projectDocSnap = await getDoc(projectDocRef); // Get the document snapshot
 
+
 if (!projectDocSnap.exists()) {
     alert(`Error: No se encontró el proyecto con ID "${selectedProject}" en la base de datos.`);
     // TODO: Resetear estado de carga
@@ -517,13 +641,19 @@ if (!projectDocSnap.exists()) {
     return;
 }
 
+
 const projectId = projectDocSnap.id;
 console.log(`Subiendo datos al proyecto con ID: ${projectId}`);
 
 
 
+
+
+
     // Referencia a la subcolección de horas extras dentro del proyecto
     const hoursCollectionRef = collection(db, 'companies', companyId, 'projects', projectId, 'registrosHorasExtras');
+
+
 
 
     // Subir cada registro de horas extras como un documento
@@ -535,8 +665,11 @@ console.log(`Subiendo datos al proyecto con ID: ${projectId}`);
     }
 
 
+
+
     alert('Datos de horas extras subidos con éxito.');
     setFileData([]); // Limpiar los datos después de una subida exitosa
+    setLastLoadedFileName(''); // Clear the file name display
 
 
  fetchHoursData(projectId); // Refresh hours data after successful upload
@@ -551,8 +684,12 @@ console.log(`Subiendo datos al proyecto con ID: ${projectId}`);
 };
 
 
+
+
 const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function to handle file upload
   console.log('Función handleFileUpload llamada.'); // Log al inicio
+
+
 
 
   // Add checks for event.target and files
@@ -563,10 +700,14 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
   }
 
 
+
+
   const files = event.target.files; // Get the selected files
   if (files.length > 0 && files[0]) { // Check if files array is not empty and has a first element
     const file = files[0];
     const reader = new FileReader();
+
+
 
 
     // Check if the file name is the same as the last loaded file
@@ -576,10 +717,14 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
     }
 
 
+
+
     reader.onload = (e) => {
       if (e.target && e.target.result) { // Check if the file reading was successful
         const data = new Uint8Array(e.target.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' }); // Read the Excel file
+
+
 
 
         // Assume you want to read the first sheet
@@ -587,20 +732,27 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
         const worksheet = workbook.Sheets[sheetName];
 
 
+
+
         // Convertir la hoja a un array de arrays (cada array es una fila)
         const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         console.log('Raw Excel data (array of arrays):', rawData); // Log raw data
 
 
+
+
         // --- Logic to extract date and project name from file name ---
         const fileName = file.name;
-        const fileNameMatch = fileName.match(/^DIARIO_(.+)_(\d{8})\.xlsx$/i); // Regex to match DIARIO_ProjectName_YYYYMMDD.xlsx
+        const fileNameMatch = fileName.match(/^DIARIO_(.+)_(\d{8})\.xlsx$/i); // Regex to match DIARIO_NombreProyecto_YYYYMMDD.xlsx
+
 
         let fileDateObject: Date | null = null;
         let projectNameFromFile: string | null = null;
 
+
         let headerRowIndex = -1;
         const processedData: any[] = [];
+
 
         // Find the header row (assuming 'Nombre' is a header)
         for (let i = 0; i < rawData.length; i++) {
@@ -617,16 +769,21 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
         }
 
 
+
+
         // --- Process extracted date and project name from file name ---
         if (fileNameMatch && fileNameMatch[1] && fileNameMatch[2]) {
             projectNameFromFile = fileNameMatch[1].replace(/_/g, ' '); // Replace underscores with spaces for project name
             const dateStringFromFile = fileNameMatch[2]; // YYYYMMDD
 
+
             const year = parseInt(dateStringFromFile.substring(0, 4), 10);
             const month = parseInt(dateStringFromFile.substring(4, 6), 10) - 1; // Months are 0-indexed
             const day = parseInt(dateStringFromFile.substring(6, 8), 10);
 
+
             fileDateObject = new Date(year, month, day);
+
 
             if (isNaN(fileDateObject.getTime())) {
                 fileDateObject = null; // Not a valid date
@@ -636,6 +793,7 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
                 console.log("Project Name extracted from file name:", projectNameFromFile);
             }
         }
+
 
          if (headerRowIndex === -1) {
              alert('No se encontró la fila de encabezado con "Nombre". Asegúrate de que el formato sea correcto.');
@@ -649,6 +807,8 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
           }
 
 
+
+
         // Procesar las filas de datos a partir de la siguiente al encabezado
         // Usaremos los valores de la fila de encabezado para mapear los datos correctamente
         const headerRow = rawData[headerRowIndex];
@@ -656,6 +816,8 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
         const ciColIndex = headerRow.indexOf('C.I.');
         const hIngresoColIndex = headerRow.indexOf('H. Ingreso');
         const hSalidaColIndex = headerRow.indexOf('H. Salida');
+
+
 
 
         // Validar que se encontraron las columnas necesarias
@@ -668,14 +830,22 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
 
 
 
+
+
+
+
         for (let i = headerRowIndex + 1; i < rawData.length; i++) {
             const row = rawData[i];
+
+
 
 
             // Asegurarnos de que la fila tiene suficientes columnas antes de intentar acceder
             if (row.length <= Math.max(nombreColIndex, ciColIndex, hIngresoColIndex, hSalidaColIndex)) {
                 continue; // Saltar filas que no tienen todas las columnas esperadas
             }
+
+
 
 
             // Extraer los datos usando los índices de las columnas
@@ -687,11 +857,16 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
 
 
 
+
+
+
+
             // Ignorar filas que no parecen ser datos de trabajadores (ej: filas vacías)
             // Podemos ajustar esta condición si hay otros patrones a ignorar
             if (!nombreTrabajador || !cedula) {
                 continue; // Saltar filas sin Nombre o C.I.
             }
+
 
             // Store the date as a Date object
             processedData.push({
@@ -705,16 +880,24 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
         }
 
 
+
+
         console.log('Datos del archivo Excel procesados:', processedData); // Log para ver los datos procesados
         setFileData(processedData); // Almacenar los datos procesados en el estado `fileData`
+
+
 
 
         // Update the state with the name of the successfully loaded file
         setLastLoadedFileName(file.name);
 
 
+
+
       }
     };
+
+
 
 
     reader.onerror = (error) => {
@@ -722,6 +905,8 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
       alert('Error al leer el archivo.');
       setFileData([]); // Limpiar datos en caso de error de lectura
     };
+
+
 
 
     reader.readAsArrayBuffer(file);
@@ -732,11 +917,16 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
 
 
 
+
+
+
   // Placeholder for project management
   const handleCreateProject = () => {
     console.log('Create project clicked');
     // TODO: Implement create project functionality (este botón es el verde, puedes decidir si lo mantienes o lo eliminas)
   };
+
+
 
 
   const handleEditProject = (project: Project) => {
@@ -745,10 +935,13 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
   };
 
 
+
+
   const handleDeleteProject = (project: Project) => {
     console.log('Delete project clicked:', project);
     // TODO: Implement delete project functionality
   };
+
 
   const handleDeleteRecord = async (recordId: string) => {
     console.log(`Attempting to delete record with ID: ${recordId}`);
@@ -759,38 +952,48 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
     try {
       const companyId = 'company1'; // TODO: Replace with dynamic company ID
 
+
       // Find the project ID for the selected project
       const projectsCollectionRef = collection(db, 'companies', companyId, 'projects');
       const projectDocRef = doc(projectsCollectionRef, selectedProject); // Get document reference by ID
       const projectDocSnap = await getDoc(projectDocRef); // Get the document snapshot
-      
+
+
       if (!projectDocSnap.exists()) {
           alert(`Error: No se encontró el proyecto con ID "${selectedProject}" en la base de datos.`);
           return;
       }
-      
-      const projectId = projectDocSnap.id;
+
+
+     
+const projectId = projectDocSnap.id;
       console.log(`Encontrado ID del proyecto ${projectId} para eliminar registro.`);
-       
+
+
 
 
       const recordRef = doc(db, 'companies', companyId, 'projects', projectId, 'registrosHorasExtras', recordId);
 
+
       await deleteDoc(recordRef);
       console.log(`Record with ID ${recordId} successfully deleted.`);
+
 
     } catch (error) {
       console.error(`Error deleting record with ID ${recordId}:`, error);
     }
   };
 
+
   if (authLoading) {
     return <div className="flex min-h-screen flex-col items-center justify-center p-24">Cargando...</div>;
   }
 
 
+
+
   return (
-    <div className="container mx-auto p-4">
+    <div className="container mx-auto p-4"> {/* Este es el div principal */}
       {/* Botón de Cerrar Sesión */}
       <button
         onClick={handleLogout}
@@ -798,6 +1001,7 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
       >
         Cerrar Sesión
       </button>
+
 
       <h1 className="text-2xl font-bold mb-4">Dashboard Horas Extras</h1>
 
@@ -826,6 +1030,8 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
           </select>
         )}
       </div>
+
+
 
 
       {/* File Upload Section */}
@@ -861,6 +1067,8 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
           </>
         )}
       </div>
+
+
 
 
  {/* Filters Section */}
@@ -915,78 +1123,151 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
           Aplicar Filtros
         </button>
       </div>
+
+
  {/* Button to delete records by date range */}
-        {selectedProject && (
-          <button
-            onClick={handleDeleteRecordsByDateRange}
-            className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline ml-4"
-          >Eliminar Registros por Fecha</button>
-        )}
 
 
-      {/* Display Hours Data Section */}
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold mb-2">Datos de Horas Extras del Proyecto Seleccionado</h2>
-        {selectedProject ? (
-          hoursData.length === 0 ? (
-            <p>No hay datos de horas extras subidos para este proyecto.</p>
-          ) : (
-            <div className="mt-4 max-h-96 overflow-y-auto border rounded p-2">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre del Trabajador</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cédula</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hora Ingreso</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hora Salida</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {hoursData.map((record) => (
-                    // Ensure record.id exists before using it as a key
-                    // If record.id might not always be available, consider using a combination
-                    // of fields or a generated key if the data is guaranteed to be unique.
-                    // For now, assuming record.id is reliable for fetched data. */}
-                    <tr key={record.id || `row-${index}`}> {/* Use record.id as key if available, fallback to index */}
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {record.fecha
-                          ? record.fecha instanceof Date
-                            ? formatDateToDDMMYYYY(record.fecha)
-                            : typeof record.fecha === 'object' && record.fecha.seconds !== undefined
-                              ? formatDateToDDMMYYYY(new Date(record.fecha.seconds * 1000))
-                              : String(record.fecha)
-                          : 'N/A' // Handle cases where fecha is null or undefined
-                        }
-                      </td>
- <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{record.nombreTrabajador}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{record.cedula}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{record.horaIngreso}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{record.horaSalida}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => handleDeleteRecord(record.id)}
-                          className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-sm"
-                        >
-                          Eliminar
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )
-        ) : (
-          <p>Selecciona un proyecto para ver los datos de horas extras.</p>
-        )}
-      </div>
+   {/* Absence Registration Section */}
+ <div className="mb-6 p-4 border rounded-md bg-gray-100">
+ <h2 className="text-xl font-semibold mb-2">Registrar Ausencia</h2>
+ <div className="flex flex-wrap gap-4 mb-4">
+   {/* Worker Selection */}
+   <div className="flex-1 min-w-[200px]">
+     <label htmlFor="absenceWorker" className="block text-gray-700 text-sm font-bold mb-2">Trabajador:</label>
+     <select
+       id="absenceWorker"
+       className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+       value={selectedWorkerForAbsence}
+       onChange={(e) => setSelectedWorkerForAbsence(e.target.value)}
+     >
+       <option value="">-- Selecciona un Trabajador --</option>
+       {/* Populate with workers from trabajadoresList */}
+       {trabajadoresList.map(worker => (
+         <option key={worker.id} value={worker.id}>{worker.nombre} ({worker.cedula})</option>
+       ))}
+     </select>
+   </div>
+   {/* Date Selection */}
+   <div className="flex-1 min-w-[200px]">
+     <label htmlFor="absenceDate" className="block text-gray-700 text-sm font-bold mb-2">Fecha:</label>
+     <input
+       type="date"
+       id="absenceDate"
+       className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+       value={absenceDate}
+       onChange={(e) => setAbsenceDate(e.target.value)}
+     />
+   </div>
+   {/* Absence Type Selection */}
+   <div className="flex-1 min-w-[200px]">
+     <label htmlFor="absenceType" className="block text-gray-700 text-sm font-bold mb-2">Tipo de Ausencia:</label>
+     <select
+       id="absenceType"
+       className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+       value={absenceType}
+       onChange={(e) => setAbsenceType(e.target.value)}
+     >
+       <option value="">-- Selecciona un Tipo --</option>
+       <option value="Vacaciones">Vacaciones</option>
+       <option value="Maternidad">Maternidad</option>
+       <option value="Paternidad">Paternidad</option>
+       <option value="Enfermedad">Enfermedad</option>
+       <option value="Justificada">Justificada</option>
+       <option value="Injustificada">Injustificada</option>
+       <option value="Otros">Otros</option>
+     </select>
+   </div>
+   {/* Description (Optional) */}
+   {/* You might want to add an input or textarea for the description here */}
+   {/* <div className="flex-1 min-w-[200px]">
+       <label htmlFor="absenceDescription" className="block text-gray-700 text-sm font-bold mb-2">Descripción (Opcional):</label>
+       <textarea
+         id="absenceDescription"
+         className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+         value={absenceDescription}
+         onChange={(e) => setAbsenceDescription(e.target.value)}
+       ></textarea>
+    </div> */}
+  </div> {/* Closing the flex container for Absence Registration inputs */}
+  {/* You might want to add a button to submit the absence here */}
+  {/* <button className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mt-4">
+     Registrar Ausencia
+  </button> */}
+</div> {/* Closing the main div for Absence Registration Section */}
+
+
+
+
+{/* Display Hours Data Section */}
+<div className="mb-6">
+ <h2 className="text-xl font-semibold mb-2">Datos de Horas Extras del Proyecto Seleccionado</h2>
+ {selectedProject ? (
+   hoursData.length === 0 ? (
+     <p>No hay datos de horas extras subidos para este proyecto.</p>
+   ) : (
+     <div className="mt-4 max-h-96 overflow-y-auto border rounded p-2">
+       <table className="min-w-full divide-y divide-gray-200">
+         <thead className="bg-gray-50">
+           <tr>
+             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre del Trabajador</th>
+             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cédula</th>
+             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hora Ingreso</th>
+             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hora Salida</th>
+             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+           </tr>
+         </thead>
+         <tbody className="bg-white divide-y divide-gray-200">
+         {hoursData.map((record, index) => ( // Added 'index' here
+             // Ensure record.id exists before using it as a key
+             // If record.id might not always be available, consider using a combination
+             // of fields or a generated key if the data is guaranteed to be unique.
+             // For now, assuming record.id is reliable for fetched data. */}
+             <tr key={record.id || `row-${index}`}> {/* Use record.id as key if available, fallback to index */}
+               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                 {record.fecha
+                   ? record.fecha instanceof Date
+                     ? formatDateToDDMMYYYY(record.fecha)
+                     : typeof record.fecha === 'object' && record.fecha.seconds !== undefined
+                       ? formatDateToDDMMYYYY(new Date(record.fecha.seconds * 1000))
+                       : String(record.fecha)
+                   : 'N/A' // Handle cases where fecha is null or undefined
+                 }
+               </td>
+               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{record.nombreTrabajador}</td>
+               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{record.cedula}</td>
+               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{record.horaIngreso}</td>
+               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{record.horaSalida}</td>
+               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                 <button
+                   onClick={() => handleDeleteRecord(record.id)}
+                   className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-sm"
+                 >
+                   Eliminar
+                 </button>
+               </td>
+             </tr>
+           ))}
+         </tbody>
+       </table>
+     </div>
+   )
+ ) : (
+   <p>Selecciona un proyecto para ver los datos de horas extras.</p>
+ )}
+</div>
+
+
+
+
 
 
       {/* Project Management Section */}
       <div className="mb-6">
         <h2 className="text-xl font-semibold mb-3">Gestión de Proyectos/Fincas</h2>
+
+
 
 
 {/* Formulario para crear nuevo proyecto */}
@@ -1005,6 +1286,8 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
         </div>
 
 
+
+
         <button
           onClick={handleCreateProjectFirebase}
           className={`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mr-2 ${isCreatingProject ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -1014,6 +1297,8 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
         </button>
 
 
+
+
         {/* Botón original "Crear Nuevo Proyecto" (puedes decidir si lo mantienes o lo eliminas) */}
         <button
           onClick={handleCreateProject}
@@ -1021,6 +1306,8 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
         >
           Crear Nuevo Proyecto
         </button>
+
+
 
 
         {loadingProjects && <p>Cargando proyectos para gestionar...</p>}
@@ -1053,6 +1340,7 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
           </ul>
         )}
       </div>
+
 
       {/* Temporary Trabajador Testing Section */}
       <div className="mb-6 p-4 border rounded-md bg-gray-100">
@@ -1111,3 +1399,11 @@ const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => { // Function
     </div>
   );
 }
+
+
+
+
+
+
+
+
