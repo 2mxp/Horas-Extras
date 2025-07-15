@@ -1,20 +1,25 @@
 // src/app/components/ProjectEditModal.tsx
 import React, { useState, useEffect, ChangeEvent } from 'react';
+import { Project } from '../lib/projectService'; // Asegúrate de que la ruta sea correcta
 
 interface ProjectEditModalProps {
-  project: {
+  isOpen: boolean;
+  onClose: () => void;
+  project: { // Estructura del proyecto
     id: string;
     name: string;
     restDays: number[];
     weeklyOvertimeLimit: number;
     dailyOvertimeLimit: number;
     hourlyRate: number;
+    createdAt?: Date; // <--- Agregar esta línea (marcado como opcional porque no siempre estará presente)
+    // Añadir cualquier otra propiedad que pueda tener un Project
   } | null;
-  onSave: (projectId: string, updatedData: any) => void;
-  onCancel: () => void;
+  onSave: (project: Project) => void;
 }
 
-const ProjectEditModal: React.FC<ProjectEditModalProps> = ({ project, onSave, onCancel }) => {
+
+const ProjectEditModal: React.FC<ProjectEditModalProps> = ({ isOpen, onClose, project, onSave }) => { // Modificado para desestructurar onClose
   const [editedName, setEditedName] = useState('');
   const [editedRestDays, setEditedRestDays] = useState<number[]>([]);
   const [editedWeeklyOvertimeLimit, setEditedWeeklyOvertimeLimit] = useState(0);
@@ -25,13 +30,23 @@ const ProjectEditModal: React.FC<ProjectEditModalProps> = ({ project, onSave, on
     // Populate form fields when project prop changes
     if (project) {
       setEditedName(project.name);
+      // Asegurarse de que los valores numéricos sean manejados correctamente (evitar NaN)
+      setEditedRestDays(project.restDays || []); // Usar un array vacío por defecto si es null/undefined
+      setEditedWeeklyOvertimeLimit(project.weeklyOvertimeLimit || 0);
+      setEditedDailyOvertimeLimit(project.dailyOvertimeLimit || 0);
+      setEditedHourlyRate(project.hourlyRate || 0);
     } else {
+      // Limpiar los estados si no hay proyecto
       setEditedName('');
+      setEditedRestDays([]);
+      setEditedWeeklyOvertimeLimit(0);
+      setEditedDailyOvertimeLimit(0);
+      setEditedHourlyRate(0);
     }
-  }, [project]);
+  }, [project]); // Se ejecuta cuando el prop 'project' cambia
 
-  if (!project) {
-    return null; // Don't render if no project is being edited
+  if (!isOpen) { // Usar el prop isOpen para controlar la visibilidad
+    return null; // Don't render if modal is not open
   }
 
   const handleNameChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -45,27 +60,33 @@ const ProjectEditModal: React.FC<ProjectEditModalProps> = ({ project, onSave, on
   };
 
   const handleWeeklyLimitChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setEditedWeeklyOvertimeLimit(parseFloat(e.target.value));
+    setEditedWeeklyOvertimeLimit(parseFloat(e.target.value) || 0); // Parsear a float y usar 0 si es NaN
   };
 
   const handleDailyLimitChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setEditedDailyOvertimeLimit(parseFloat(e.target.value));
+    setEditedDailyOvertimeLimit(parseFloat(e.target.value) || 0); // Parsear a float y usar 0 si es NaN
   };
 
   const handleHourlyRateChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setEditedHourlyRate(parseFloat(e.target.value));
+    setEditedHourlyRate(parseFloat(e.target.value) || 0); // Parsear a float y usar 0 si es NaN
   };
 
   const handleSave = () => {
     if (editedName.trim() && project) {
-      const updatedData = {
+      const updatedProject: Project = { // Crear un objeto Project completo para pasar a onSave
+        id: project.id, // Mantener el ID original
         name: editedName.trim(),
         restDays: editedRestDays,
         weeklyOvertimeLimit: editedWeeklyOvertimeLimit,
         dailyOvertimeLimit: editedDailyOvertimeLimit,
         hourlyRate: editedHourlyRate,
+        createdAt: project.createdAt || new Date(), // Mantener el createdAt original si existe, o usar la fecha actual si es undefined
+
+        // Añadir cualquier otra propiedad necesaria de Project
       };
-      onSave(project.id, updatedData);
+      onSave(updatedProject); // Llamar a onSave con el objeto Project completo
+    } else if (!editedName.trim()) {
+      alert('El nombre del proyecto no puede estar vacío.');
     }
   };
 
@@ -141,13 +162,13 @@ const ProjectEditModal: React.FC<ProjectEditModalProps> = ({ project, onSave, on
 
         <div className="flex justify-end">
           <button
-            onClick={onCancel}
+            onClick={onClose} // Usar onClose para cancelar
             className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded mr-2 focus:outline-none focus:shadow-outline"
           >
             Cancelar
           </button>
           <button
-            onClick={handleSave}
+            onClick={handleSave} // Llama a handleSave internamente
             className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
           >
             Guardar Cambios
